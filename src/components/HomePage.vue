@@ -16,27 +16,31 @@
         {{ isSidebarCollapsed ? '▶' : '◀' }}
       </button>
       <ul>
-        <li :class="{ 'hidden': isSidebarCollapsed }" @click="addProject">Проекты</li>
+        <li :class="{ 'hidden': isSidebarCollapsed }" @click="showProjectsPage = !showProjectsPage">
+          Проекты
+        </li>
         <li :class="{ 'hidden': isSidebarCollapsed }">Участники</li>
         <li :class="{ 'hidden': isSidebarCollapsed }">Отчеты</li>
       </ul>
     </nav>
 
     <div class="main-content" :class="{ 'shifted': isSidebarCollapsed }">
-    <nav class="navigation">
-      <button 
-        class="add-project-button" 
-        v-if="user.role === 'ProjectOwner'" 
-        @click="toggleCreateProject">
-        {{ showCreateProject ? 'Закрыть' : 'Создать проект' }}
-      </button>
-    </nav>
-
+      <nav class="navigation">
+        <button 
+          class="add-project-button" 
+          v-if="user.role === 'ProjectOwner'" 
+          @click="toggleCreateProject">
+          {{ showCreateProject ? 'Закрыть' : 'Создать проект' }}
+        </button>
+      </nav>
 
       <!-- Основной контент -->
       <section class="views">
         <p v-if="!showCreateProject"></p>
         <CreateProject v-else @projectCreated="handleProjectCreated" />
+
+        <!-- Добавьте условное отображение компонента ProjectsPage -->
+        <ProjectsPage v-if="showProjectsPage" />
       </section>
     </div>
   </div>
@@ -44,10 +48,11 @@
 
 <script>
 import CreateProject from '../views/CreateProject.vue';
+import ProjectsPage from '@/views/ProjectsPage.vue';
 
 export default {
   name: 'HomePage',
-  components: { CreateProject },
+  components: { CreateProject, ProjectsPage },
   data() {
     return {
       currentTime: '',
@@ -58,6 +63,7 @@ export default {
       },
       isSidebarCollapsed: false,
       showCreateProject: false,
+      showProjectsPage: false, // Переменная для отображения страницы проектов
     };
   },
   mounted() {
@@ -73,8 +79,8 @@ export default {
   },
   methods: {
     toggleCreateProject() {
-  this.showCreateProject = !this.showCreateProject;
-},
+      this.showCreateProject = !this.showCreateProject;
+    },
     updateTime() {
       const now = new Date();
       this.currentTime = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
@@ -89,6 +95,7 @@ export default {
   },
 };
 </script>
+
 
 <style scoped>
 #app {

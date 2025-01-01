@@ -5,7 +5,6 @@
       <div class="project-dates">
         <label for="start-date">Дата начала:</label>
         <input type="date" id="start-date" v-model="startDate" required />
-
         <label for="end-date">Дата окончания:</label>
         <input type="date" id="end-date" v-model="endDate" required />
       </div>
