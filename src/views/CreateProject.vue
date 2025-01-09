@@ -14,6 +14,7 @@
       <label for="project-name">Название проекта:</label>
       <input type="text" id="project-name" v-model="projectName" required />
 
+
       <button type="button" @click="toggleDescription" class="btn-description">
         {{ showDescription ? "Скрыть описание" : "Добавить описание" }}
       </button>
@@ -59,10 +60,13 @@
 </template>
 
 <script>
+import { useToast } from 'vue-toastification';
+import 'vue-toastification/dist/index.css'; 
 export default {
   name: "CreateProject",
   data() {
     return {
+      toast: useToast(),
       projectName: "",
       projectDescription: "",
       startDate: "",
@@ -97,7 +101,7 @@ export default {
     async fetchUsers() {
       const token = localStorage.getItem("token");
       if (!token) {
-        alert("Ошибка: отсутствует токен авторизации.");
+        this.toast.error("Ошибка: отсутствует токен авторизации.");
         return;
       }
 
@@ -121,7 +125,7 @@ export default {
           }
         } else {
           const errorData = await response.json();
-          alert("Ошибка загрузки пользователей: " + errorData.error);
+          this.toast.error("Ошибка загрузки пользователей: " + errorData.error);
         }
       } catch (error) {
         console.error("Ошибка при загрузке пользователей:", error);
@@ -143,7 +147,7 @@ export default {
             this.availableUsers.splice(index, 1);
           }
         } else {
-          alert("Этот пользователь уже добавлен в проект.");
+          this.toast.error("Этот пользователь уже добавлен в проект.");
         }
         this.selectedUser = null;
       }
@@ -164,12 +168,12 @@ export default {
     async saveProject() {
       const token = localStorage.getItem("token");
       if (!token) {
-        alert("Ошибка: отсутствует токен авторизации.");
+        this.toast.error("Ошибка: отсутствует токен авторизации.");
         return;
       }
 
       if (this.projectUsers.length === 0) {
-        alert("Добавьте хотя бы одного участника в проект.");
+        this.toast.error("Добавьте хотя бы одного участника в проект.");
         return;
       }
 
@@ -183,7 +187,7 @@ export default {
       };
 
       try {
-        const response = await fetch("http://localhost:4000/api/projects", {
+        const response = await fetch("http://localhost:4000/api/createProject", {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
@@ -193,10 +197,10 @@ export default {
         });
 
         if (response.ok) {
-          alert("Проект успешно создан!");
+          this.toast.success("Проект успешно создан!");
         } else {
           const errorData = await response.json();
-          alert("Ошибка: " + errorData.error);
+          this.toast.error("Ошибка: " + errorData.error);
         }
       } catch (error) {
         console.error("Ошибка:", error);

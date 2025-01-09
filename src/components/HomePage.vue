@@ -139,7 +139,7 @@ h3, p {
 
 .sidebar {
   width: 200px;
-  background-color: #e9ecef;
+  background-color: #f9f9f9;
   transition: width 0.3s ease;
   position: fixed;
   top: 50px; /* Отступ от заголовка */
