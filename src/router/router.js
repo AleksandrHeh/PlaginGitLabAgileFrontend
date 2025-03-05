@@ -8,10 +8,17 @@ const routes = [
     component: () => import('../components/AuthorizationForm.vue')
   },
   {
-    path: '/',
+    path: '/home',
     name: 'Home',
     component: () => import('../components/HomePage.vue')
   },
+  {
+    path: '/project/:id',
+    name: 'ProjectPage',
+    component: () => import('../components/ProjectPage.vue'),
+    props: true
+  }
+  
   // Добавьте другие маршруты
 ];
 

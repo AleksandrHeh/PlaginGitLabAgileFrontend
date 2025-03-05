@@ -10,17 +10,13 @@
         <div class="project-title">
           <h3>{{ project.PrjTitle }}</h3>
           <div class="icons">
-            <span class="info-icon" @click="openModal(project)">
-              &#8505;
-            </span>
-            <span class="edit-icon" @click="openEditModal(project)">
-              &#9998;
-            </span>
-            <span class="delete-icon" @click="openDeleteModal(project)">
-              &#128465;
-            </span>
+            <span class="info-icon" @click.stop="openModal(project)">&#8505;</span>
+            <span class="edit-icon" @click.stop="openEditModal(project)">&#9998;</span>
+            <span class="delete-icon" @click.stop="openDeleteModal(project)">&#128465;</span>
+            <button class="open-project-btn" @click.stop="goToProject(project.PrjID)">Открыть проект</button>
           </div>
         </div>
+
         <!-- Модальное окно информации -->
         <div v-if="modalProject && modalProject.PrjID === project.PrjID" class="modal">
           <div class="modal-content">
@@ -34,6 +30,7 @@
             <p><strong>Владелец:</strong> {{ modalProject.PrjOwner }}</p>
           </div>
         </div>
+
         <!-- Модальное окно редактирования -->
         <div v-if="editModalProject && editModalProject.PrjID === project.PrjID" class="modal">
           <div class="modal-content">
@@ -53,6 +50,7 @@
             </form>
           </div>
         </div>
+
         <!-- Модальное окно удаления -->
         <div v-if="deleteModalProject && deleteModalProject.PrjID === project.PrjID" class="modal">
           <div class="modal-content">
@@ -73,7 +71,7 @@
 
 <script>
 import { useToast } from 'vue-toastification';
-import 'vue-toastification/dist/index.css'; 
+import 'vue-toastification/dist/index.css';
 
 export default {
   data() {
@@ -81,7 +79,7 @@ export default {
       projects: [],
       modalProject: null,
       editModalProject: null,
-      deleteModalProject: null,  // Для хранения выбранного проекта для удаления
+      deleteModalProject: null,
       toast: useToast(),
     };
   },
@@ -113,11 +111,11 @@ export default {
     },
     formatDateToYYYYMMDD(date) {
       const d = new Date(date);
-      return d.toISOString().split('T')[0]; 
+      return d.toISOString().split('T')[0];
     },
     formatDate(date) {
       const d = new Date(date);
-      return d.toLocaleDateString('ru-RU'); 
+      return d.toLocaleDateString('ru-RU');
     },
     openModal(project) {
       this.modalProject = project;
@@ -162,11 +160,11 @@ export default {
     },
     async updateProject() {
       const transformedProject = {
-        id: this.editModalProject.PrjID, 
+        id: this.editModalProject.PrjID,
         title: this.editModalProject.PrjTitle,
         description: this.editModalProject.PrjDescription,
         start_date: this.formatDateToYYYYMMDD(this.editModalProject.PrjStartDate),
-        end_date: this.formatDateToYYYYMMDD(this.editModalProject.PrjEndDate), 
+        end_date: this.formatDateToYYYYMMDD(this.editModalProject.PrjEndDate),
       };
 
       try {
@@ -191,6 +189,9 @@ export default {
         console.error("Ошибка обновления проекта:", error);
       }
     },
+    goToProject(projectId) {
+      this.$router.push({ name: 'ProjectPage', params: { id: projectId } });
+    },
   },
   mounted() {
     this.fetchProjects();
@@ -212,11 +213,6 @@ export default {
   padding: 20px;
   border-radius: 10px;
   box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
-  cursor: pointer;
-  transition: background-color 0.3s ease;
-}
-.project-item:hover {
-  background-color: #e6e6e6;
 }
 .project-title {
   display: flex;
@@ -226,6 +222,7 @@ export default {
 .icons {
   display: flex;
   gap: 15px;
+  align-items: center;
 }
 .info-icon,
 .edit-icon,
@@ -237,19 +234,30 @@ export default {
   background-color: #f9f9f9;
   transition: background-color 0.3s ease;
 }
-
 .delete-icon:hover {
   background-color: #ff5757;
 }
-.info-icon:hover{
+.info-icon:hover {
   background-color: #a1a1a1;
 }
-
 .edit-icon:hover {
   background-color: #5ea0eb;
 }
 .delete-icon {
   color: rgb(53, 53, 53);
+}
+.open-project-btn {
+  padding: 8px 16px;
+  background-color: #4470ff;
+  color: white;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+  font-size: 14px;
+  transition: background-color 0.3s ease;
+}
+.open-project-btn:hover {
+  background-color: #295bff;
 }
 .modal {
   position: fixed;
@@ -318,8 +326,7 @@ form button {
 form button:hover {
   background-color: #45a049;
 }
-
-.save-button{
+.save-button {
   width: 45%;
   padding: 15px;
   font-size: 1.1em;
@@ -331,7 +338,7 @@ form button:hover {
   color: white;
   transition: background-color 0.3s ease;
 }
-.save-button:hover{
+.save-button:hover {
   background-color: #295bff;
 }
 .delete-button {
@@ -346,7 +353,7 @@ form button:hover {
   color: white;
   transition: background-color 0.3s ease;
 }
-.cancel-button{
+.cancel-button {
   width: 45%;
   padding: 15px;
   font-size: 1.1em;
@@ -360,13 +367,6 @@ form button:hover {
 }
 .delete-button:hover {
   background-color: #e62131;
-}
-.modal-content .cancel-button {
-  background-color: #f0f0f0;
-  color: #333;
-}
-.modal-content .cancel-button:hover {
-  background-color: #ddd;
 }
 .button-container {
   display: flex;
