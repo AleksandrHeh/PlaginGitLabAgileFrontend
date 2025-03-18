@@ -21,6 +21,9 @@
         </li>
         <li :class="{ 'hidden': isSidebarCollapsed }">Участники</li>
         <li :class="{ 'hidden': isSidebarCollapsed }">Отчеты</li>
+        <li :class="{ 'hidden': isSidebarCollapsed }" class="logout-button" @click="logout">
+          Выйти
+        </li>
       </ul>
     </nav>
 
@@ -49,6 +52,7 @@
 <script>
 import CreateProject from '../views/CreateProject.vue';
 import ProjectsPage from '@/views/ProjectsPage.vue';
+import jwt_decode from 'jwt-decode'; // Или import { jwtDecode } from 'jwt-decode';
 
 export default {
   name: 'HomePage',
@@ -63,18 +67,40 @@ export default {
       },
       isSidebarCollapsed: false,
       showCreateProject: false,
-      showProjectsPage: false, // Переменная для отображения страницы проектов
+      showProjectsPage: false,
+      errorMessage: '', // Поле для хранения сообщения об ошибке
     };
   },
   mounted() {
+    const userData = localStorage.getItem('user');
+    if (userData) {
+      this.user = JSON.parse(userData);
+    }
+
     this.updateTime();
     setInterval(this.updateTime, 1000);
+
     const token = localStorage.getItem('token');
-    if (token) {
-      const payload = JSON.parse(atob(token.split('.')[1]));
-      this.user.name = payload.username;
-      this.user.email = payload.email;
-      this.user.role = payload.role;
+    console.log("Токен:", token);
+    if (!token) {
+      this.errorMessage = "Токен отсутствует. Пожалуйста, войдите снова.";
+      return;
+    }
+
+    const tokenParts = token.split('.');
+    if (tokenParts.length !== 3) {
+      this.errorMessage = "Некорректный формат токена. Пожалуйста, войдите снова.";
+      return;
+    }
+
+    try {
+      const payload = jwt_decode(token); // Или jwtDecode(token)
+      this.user.name = payload.username || 'Неизвестный пользователь';
+      this.user.email = payload.email || 'Нет данных';
+      this.user.role = payload.role || 'Гость';
+    } catch (error) {
+      console.error("Ошибка при декодировании токена:", error);
+      this.errorMessage = "Ошибка авторизации. Пожалуйста, войдите снова.";
     }
   },
   methods: {
@@ -91,13 +117,46 @@ export default {
     handleProjectCreated(projectName) {
       console.log("Проект создан:", projectName);
       this.showCreateProject = false;
-    }
+    },
+    logout() {
+      // Очищаем данные пользователя из localStorage
+      localStorage.removeItem('user');
+      localStorage.removeItem('token');
+
+      // Перенаправляем пользователя на страницу авторизации
+      this.$router.push({ name: 'AuthorizationForm' });
+    },
   },
 };
 </script>
 
-
 <style scoped>
+.logout-button {
+  background-color: #dc3545; /* Красный фон */
+  color: white; /* Белый текст */
+  border: none; /* Без границ */
+  padding: 5px 10px; /* Внутренние отступы */
+  border-radius: 5px; /* Скругленные углы */
+  cursor: pointer; /* Указатель мыши */
+  font-size: 0.9rem; /* Размер текста */
+  width: 50%;
+  transition: background-color 0.3s ease; /* Плавный переход */
+}
+
+.logout-button:hover {
+  background-color: #c82333; /* Темно-красный при наведении */
+}
+/* Стиль для сообщения об ошибке */
+.auth-error {
+  background-color: #ffebee; /* Красный фон */
+  color: #c62828; /* Красный текст */
+  padding: 1rem;
+  border-radius: 5px;
+  margin-bottom: 1rem;
+  text-align: center;
+  font-weight: bold;
+}
+
 #app {
   display: flex;
 }
