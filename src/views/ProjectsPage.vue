@@ -11,11 +11,12 @@
         <div class="project-header">
           <h3>{{ project.name }}</h3>
           <div class="project-actions">
-            <button @click="openProject(project.web_url)" class="open-project-btn">
+            <button @click="openProject(project.id)" class="open-project-btn">
               Открыть проект
             </button>
           </div>
         </div>
+        <p><strong>ID:</strong> {{ project.id || "Нет id" }}</p>
         <p><strong>Описание:</strong> {{ project.description || "Нет описания" }}</p>
         <p><strong>Владелец:</strong> {{ project.owner?.name || "Неизвестно" }}</p>
         <p><strong>Дата создания:</strong> {{ formatDate(project.created_at) }}</p>
@@ -80,9 +81,9 @@ export default {
         day: 'numeric',
       });
     },
-    openProject(url) {
-      window.open(url, '_blank');
-    },
+    openProject(id) {
+    this.$router.push({ name: 'ProjectPage', params: { id } });
+  },
   },
   mounted() {
     this.fetchProjects();

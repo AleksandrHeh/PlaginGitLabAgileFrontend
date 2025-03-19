@@ -22,6 +22,11 @@ const routes = [
     name: 'ProjectsPage',
     component: () => import('@/views/ProjectsPage.vue'),
   },
+  {
+    path: '/projects/:id',
+    name: 'ProjectPage',
+    component: () => import('@/components/ProjectPage.vue'),
+  },
 ];
 
 const router = createRouter({

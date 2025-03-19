@@ -1,40 +1,36 @@
 <template>
   <div class="project-page">
-    <h1>{{ project.PrjTitle }}</h1>
-    <div class="project-details">
-      <p><strong>ID проекта:</strong> {{ projectId }}</p>
-      <p><strong>Описание:</strong> {{ project.PrjDescription }}</p>
-      <p><strong>Статус:</strong> {{ project.PrjStatus }}</p>
-      <p><strong>Дата начала:</strong> {{ formatDate(project.PrjStartDate) }}</p>
-      <p><strong>Дата завершения:</strong> {{ formatDate(project.PrjEndDate) }}</p>
-      <p><strong>Владелец:</strong> {{ project.PrjOwner }}</p>
-    </div>
+    <h1>{{ project.name }}</h1>
+    <div v-if="loading" class="loading">Загрузка...</div>
+    <div v-else-if="error" class="error">{{ error }}</div>
+    <div v-else>
+      <!-- Информация о проекте -->
+      <p><strong>Описание:</strong> {{ project.description || "Нет описания" }}</p>
+      <p><strong>Владелец:</strong> {{ project.owner?.name || "Неизвестно" }}</p>
+      <p><strong>Дата создания:</strong> {{ formatDate(project.created_at) }}</p>
+      <p><strong>Последнее обновление:</strong> {{ formatDate(project.last_activity_at) }}</p>
 
-    <div class="project-actions">
+      <!-- Кнопки действий -->
+      <button @click="goBack" class="back-btn">Назад к списку проектов</button>
       <button @click="openTaskModal" class="action-btn">Создать задачу</button>
-    </div>
 
-    <div class="agile-board">
-      <h2>Задачи проекта</h2>
-      <ul>
-        <li v-for="task in tasks" :key="task.TskId" class="task-item">
-          <p><strong>Задача:</strong> {{ task.TskTitle }}</p>
-          <p><strong>Описание:</strong> {{ task.TskDescription }}</p>
-          <p><strong>Статус:</strong> {{ task.TskStatus }}</p>
-          <!-- Иконка удаления -->
-          <span class="delete-icon" @click.stop="openDeleteModal(task)">&#128465;</span>
-        </li>
-      </ul>
-    </div>
-
-    <!-- Модальное окно для подтверждения удаления -->
-    <div v-if="showDeleteModal" class="modal-overlay" @click.self="closeDeleteModal">
-      <div class="modal">
-        <h2>Удаление задачи</h2>
-        <p>Вы уверены, что хотите удалить задачу "{{ selectedTask?.TskTitle }}"?</p>
-        <div class="modal-actions">
-          <button @click="confirmDelete" class="action-btn">Удалить</button>
-          <button @click="closeDeleteModal" class="cancel-btn">Отменить</button>
+      <!-- Список задач -->
+      <div class="tasks-section">
+        <h2>Задачи проекта</h2>
+        <ul v-if="tasks.length > 0" class="tasks-list">
+          <li v-for="task in tasks" :key="task.id" class="task-item">
+            <div class="task-content">
+              <p><strong>Задача:</strong> {{ task.title }}</p>
+              <p><strong>Описание:</strong> {{ task.description || "Нет описания" }}</p>
+              <p><strong>Статус:</strong> {{ task.state }}</p>
+              <p><strong>Автор:</strong> {{ task.author?.name || "Неизвестно" }}</p>
+              <p><strong>Дата создания:</strong> {{ formatDate(task.created_at) }}</p>
+            </div>
+            <span class="delete-icon" @click.stop="openDeleteModal(task)">&#128465;</span>
+          </li>
+        </ul>
+        <div v-else class="no-tasks">
+          Нет доступных задач.
         </div>
       </div>
     </div>
@@ -43,28 +39,40 @@
     <div v-if="showTaskModal" class="modal-overlay" @click.self="closeTaskModal">
       <div class="modal">
         <h2>Создание задачи</h2>
-        <form @submit.prevent="submitTask">
+        <form @submit.prevent="createTask">
           <div>
             <label for="taskTitle">Название задачи:</label>
-            <input type="text" id="taskTitle" v-model="task.title" required />
+            <input type="text" id="taskTitle" v-model="newTask.title" required />
           </div>
           <div>
             <label for="taskDescription">Описание задачи:</label>
-            <textarea id="taskDescription" v-model="task.description" required></textarea>
+            <textarea id="taskDescription" v-model="newTask.description" required></textarea>
           </div>
           <div>
             <label for="taskPriority">Приоритет:</label>
-            <select id="taskPriority" v-model="task.priority">
-              <option value="Low">Низкий</option>
-              <option value="Medium">Средний</option>
-              <option value="High">Высокий</option>
+            <select id="taskPriority" v-model="newTask.priority">
+              <option value="low">Низкий</option>
+              <option value="medium">Средний</option>
+              <option value="high">Высокий</option>
             </select>
           </div>
-          <div>
+          <div class="modal-actions">
             <button type="submit" class="action-btn">Создать задачу</button>
             <button type="button" class="cancel-btn" @click="closeTaskModal">Отменить</button>
           </div>
         </form>
+      </div>
+    </div>
+
+    <!-- Модальное окно для подтверждения удаления -->
+    <div v-if="showDeleteModal" class="modal-overlay" @click.self="closeDeleteModal">
+      <div class="modal">
+        <h2>Удаление задачи</h2>
+        <p>Вы уверены, что хотите удалить задачу "{{ selectedTask?.title }}"?</p>
+        <div class="modal-actions">
+          <button @click="confirmDelete" class="action-btn">Удалить</button>
+          <button @click="closeDeleteModal" class="cancel-btn">Отменить</button>
+        </div>
       </div>
     </div>
   </div>
@@ -77,259 +85,238 @@ import 'vue-toastification/dist/index.css';
 export default {
   data() {
     return {
-      toast: useToast(),
       project: {},
       tasks: [],
+      loading: true,
+      error: null,
+      toast: useToast(),
       showTaskModal: false,
-      showDeleteModal: false, // Управление модальным окном удаления
-      selectedTask: null, // Выбранная задача для удаления
-      task: {
-        tsk_prj_id: 0,
+      showDeleteModal: false,
+      selectedTask: null,
+      newTask: {
         title: '',
         description: '',
-        priority: 'Medium',
+        priority: 'medium',
       },
     };
   },
-  computed: {
-    projectId() {
-      return this.$route.params.id;
-    },
-  },
   methods: {
     async fetchProject(id) {
-      const token = localStorage.getItem("token");
+      const token = localStorage.getItem('token');
       if (!token) {
-        this.toast.error("Ошибка: отсутствует токен авторизации.");
+        this.error = 'Ошибка: отсутствует токен авторизации.';
+        this.loading = false;
+        this.toast.error(this.error);
         return;
       }
 
       try {
-        // Загружаем данные проекта
-        const projectResponse = await fetch(`http://localhost:4000/api/viewProject/${id}`, {
-          headers: { Authorization: `Bearer ${token}` },
+        const response = await fetch(`http://localhost:4000/api/gitlab/projects/${id}`, {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
         });
 
-        if (projectResponse.ok) {
-          const projectData = await projectResponse.json();
-          this.project = projectData;
-          this.task.tsk_prj_id = this.projectId; // Устанавливаем ID проекта
+        if (response.ok) {
+          const data = await response.json();
+          this.project = data;
         } else {
-          const errorData = await projectResponse.json();
-          this.toast.error("Ошибка загрузки проекта: " + errorData.error);
+          const errorData = await response.json();
+          this.error = `Ошибка загрузки проекта: ${errorData.error}`;
+          this.toast.error(this.error);
         }
-
-        // Загружаем задачи проекта
-        const tasksResponse = await fetch(`http://localhost:4000/api/getTasks/${id}`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-
-        if (tasksResponse.ok) {
-          const tasksData = await tasksResponse.json();
-          this.tasks = tasksData;
-        } else {
-          const errorData = await tasksResponse.json();
-          this.toast.error("Ошибка загрузки задач: " + errorData.error);
-        }
-      } catch (error) {
-        console.error("Ошибка загрузки данных:", error);
+      } catch (err) {
+        console.error('Ошибка при загрузке проекта:', err);
+        this.error = 'Произошла ошибка при загрузке проекта.';
+        this.toast.error(this.error);
+      } finally {
+        this.loading = false;
       }
+    },
+    async fetchTasks(id) {
+      const token = localStorage.getItem('token');
+      if (!token) {
+        this.error = 'Ошибка: отсутствует токен авторизации.';
+        this.toast.error(this.error);
+        return;
+      }
+
+      try {
+        const response = await fetch(`http://localhost:4000/api/gitlab/projects/${id}/issues`, {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          this.tasks = data;
+        } else {
+          const errorData = await response.json();
+          this.error = `Ошибка загрузки задач: ${errorData.error}`;
+          this.toast.error(this.error);
+        }
+      } catch (err) {
+        console.error('Ошибка при загрузке задач:', err);
+        this.error = 'Произошла ошибка при загрузке задач.';
+        this.toast.error(this.error);
+      }
+    },
+    formatDate(dateString) {
+      const date = new Date(dateString);
+      return date.toLocaleDateString('ru-RU', {
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+      });
+    },
+    goBack() {
+      this.$router.push('/projects');
     },
     openTaskModal() {
       this.showTaskModal = true;
     },
     closeTaskModal() {
       this.showTaskModal = false;
-      this.task = {
-        tsk_prj_id: this.projectId, // Сбрасываем ID проекта
+      this.newTask = {
         title: '',
         description: '',
-        priority: 'Medium',
+        priority: 'medium',
       };
     },
-    async submitTask() {
-      try {
-        const taskData = {
-          tsk_prj_id: Number(this.task.tsk_prj_id), // Преобразуем в число
-          title: this.task.title,
-          description: this.task.description,
-          priority: this.task.priority,
-          status: "Новая", // Добавляем статус по умолчанию
-        };
-
-        console.log("Отправляемые данные:", taskData); // Логируем данные перед отправкой
-
-        const response = await fetch("http://localhost:4000/api/createTask", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(taskData),
-        });
-
-        if (!response.ok) {
-          const responseText = await response.text();
-          console.log("Ответ сервера (текст):", responseText);
-
-          if (!response.headers.get("Content-Type")?.includes("application/json")) {
-            throw new Error(`Ошибка сервера: ${response.status} ${response.statusText}`);
-          }
-
-          const errorData = JSON.parse(responseText);
-          throw new Error(errorData?.error || "Неизвестная ошибка сервера");
-        }
-
-        const data = await response.json();
-        this.tasks.push(data);
-        this.toast.success("Задача создана!");
-        this.closeTaskModal();
-      } catch (error) {
-        console.error("Ошибка при создании задачи:", error);
-        this.toast.error("Ошибка создания задачи: " + error.message);
-      }
-    },
-    openDeleteModal(task) {
-      this.selectedTask = task; // Сохраняем выбранную задачу
-      this.showDeleteModal = true; // Показываем модальное окно
-    },
-    closeDeleteModal() {
-      this.showDeleteModal = false;
-      this.selectedTask = null; // Сбрасываем выбранную задачу
-    },
-    async confirmDelete() {
-      if (this.selectedTask) {
-        await this.deleteTask(this.selectedTask.TskId); // Удаляем задачу
-        this.closeDeleteModal(); // Закрываем модальное окно
-      }
-    },
-    async deleteTask(taskId) {
-      const token = localStorage.getItem("token");
+    async createTask() {
+      const projectId = this.$route.params.id;
+      const token = localStorage.getItem('token');
       if (!token) {
-        this.toast.error("Ошибка: отсутствует токен авторизации.");
+        this.toast.error('Ошибка: отсутствует токен авторизации.');
         return;
       }
 
       try {
-        const response = await fetch(`http://localhost:4000/api/deleteTask/${taskId}`, {
-          method: "DELETE",
-          headers: { Authorization: `Bearer ${token}` },
+        const response = await fetch(`http://localhost:4000/api/gitlab/projects/${projectId}/issues`, {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(this.newTask),
         });
 
         if (response.ok) {
-          this.toast.success("Задача успешно удалена!");
-          // Удаляем задачу из списка без перезагрузки страницы
-          this.tasks = this.tasks.filter(task => task.TskId !== taskId);
+          const newIssue = await response.json();
+          this.tasks.push(newIssue);
+          this.toast.success('Задача успешно создана!');
+          this.closeTaskModal();
         } else {
           const errorData = await response.json();
-          this.toast.error("Ошибка удаления задачи: " + errorData.message);
+          this.toast.error(`Ошибка создания задачи: ${errorData.error}`);
         }
-      } catch (error) {
-        console.error("Ошибка при удалении задачи:", error);
-        this.toast.error("Ошибка удаления задачи: " + error.message);
+      } catch (err) {
+        console.error('Ошибка при создании задачи:', err);
+        this.toast.error('Произошла ошибка при создании задачи.');
       }
     },
-    formatDate(date) {
-      const d = new Date(date);
-      return d.toLocaleDateString('ru-RU');
+    openDeleteModal(task) {
+      this.selectedTask = task;
+      this.showDeleteModal = true;
+    },
+    closeDeleteModal() {
+      this.selectedTask = null;
+      this.showDeleteModal = false;
+    },
+    async confirmDelete() {
+      const projectId = this.$route.params.id;
+      const taskId = this.selectedTask.id;
+      const token = localStorage.getItem('token');
+      if (!token) {
+        this.toast.error('Ошибка: отсутствует токен авторизации.');
+        return;
+      }
+
+      try {
+        const response = await fetch(`http://localhost:4000/api/gitlab/projects/${projectId}/issues/${taskId}`, {
+          method: 'DELETE',
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        });
+
+        if (response.ok) {
+          this.tasks = this.tasks.filter((task) => task.id !== taskId);
+          this.toast.success('Задача успешно удалена!');
+          this.closeDeleteModal();
+        } else {
+          const errorData = await response.json();
+          this.toast.error(`Ошибка удаления задачи: ${errorData.error}`);
+        }
+      } catch (err) {
+        console.error('Ошибка при удалении задачи:', err);
+        this.toast.error('Произошла ошибка при удалении задачи.');
+      }
     },
   },
   mounted() {
-    console.log("Полученный ID через $route.params:", this.projectId);
     const projectId = this.$route.params.id;
-    if (!projectId) {
-      this.toast.error("Ошибка: ID проекта не найден в URL.");
-      return;
-    }
     this.fetchProject(projectId);
+    this.fetchTasks(projectId);
   },
 };
 </script>
 
 <style scoped>
-/* Основные стили для страницы проекта */
 .project-page {
-  padding: 30px;
-  background-color: #f4f4f4;
-  border-radius: 8px;
-  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-}
-
-.project-details p {
-  font-size: 16px;
-  line-height: 1.6;
-  margin: 10px 0;
-}
-
-.project-actions {
-  margin-top: 20px;
-  display: flex;
-  gap: 15px;
-}
-
-.action-btn {
-  padding: 10px 20px;
-  background-color: #4CAF50;
-  color: white;
-  border: none;
-  border-radius: 5px;
-  cursor: pointer;
-  font-size: 14px;
-  transition: background-color 0.3s;
-}
-
-.action-btn:hover {
-  background-color: #45a049;
-}
-
-.cancel-btn {
-  margin-left: 5px;
-  padding: 10px 20px;
-  background-color: #e72a2a;
-  color: white;
-  border: none;
-  border-radius: 5px;
-  cursor: pointer;
-  font-size: 14px;
-  transition: background-color 0.3s;
-}
-
-.cancel-btn:hover {
-  background-color: #d34242;
-}
-
-
-.complete-btn {
-  background-color: #f44336;
-}
-
-.complete-btn:hover {
-  background-color: #e53935;
-}
-
-.logout-btn {
-  background-color: #2196F3;
-}
-
-.logout-btn:hover {
-  background-color: #1976D2;
-}
-
-/* Стили для отображения задач */
-.agile-board {
-  margin-top: 30px;
-  background-color: #ffffff;
   padding: 20px;
-  border-radius: 8px;
-  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
 }
 
-.agile-board h2 {
-  font-size: 22px;
-  margin-bottom: 15px;
+.back-btn {
+  margin-top: 20px;
+  padding: 10px 20px;
+  background-color: #4470ff;
+  color: white;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+  font-size: 16px;
+  transition: background-color 0.3s ease;
+}
+
+.back-btn:hover {
+  background-color: #295bff;
+}
+
+.loading {
+  text-align: center;
+  font-size: 1.2em;
   color: #333;
 }
 
+.error {
+  text-align: center;
+  font-size: 1.2em;
+  color: red;
+}
 
+.tasks-section {
+  margin-top: 30px;
+}
 
-.agile-board li {
+.tasks-section h2 {
+  font-size: 24px;
+  margin-bottom: 15px;
+}
+
+.no-tasks {
+  text-align: center;
+  font-size: 1.2em;
+  color: #666;
+}
+
+.tasks-list {
+  list-style-type: none;
+  padding: 0;
+}
+
+.task-item {
   background-color: #f9f9f9;
   padding: 15px;
   margin-bottom: 10px;
@@ -337,31 +324,24 @@ export default {
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
   display: flex;
   justify-content: space-between;
-  align-items: right;
+  align-items: center;
 }
 
-.agile-board p {
-  font-size: 14px;
-  margin: 5px 0;
+.task-content {
+  flex: 1;
 }
 
-.agile-board p strong {
-  font-weight: 600;
-}
-
-/* Стили для иконки удаления */
 .delete-icon {
-  cursor: pointer;
-  color: #ff4444;
   font-size: 20px;
-  transition: color 0.3s;
+  color: #ff4444;
+  cursor: pointer;
+  margin-left: 15px;
 }
 
 .delete-icon:hover {
   color: #cc0000;
 }
 
-/* Стили для модального окна */
 .modal-overlay {
   position: fixed;
   top: 0;
@@ -375,10 +355,11 @@ export default {
 }
 
 .modal {
-  background-color: #fff;
+  background-color: white;
   padding: 30px;
   border-radius: 8px;
   width: 400px;
+  max-width: 90%;
   box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
 }
 
@@ -387,12 +368,50 @@ export default {
   margin-bottom: 15px;
 }
 
-.modal input, .modal select, .modal textarea {
+.modal form div {
+  margin-bottom: 15px;
+}
+
+.modal input,
+.modal textarea,
+.modal select {
   width: 100%;
   padding: 10px;
-  margin-bottom: 15px;
-  border-radius: 5px;
   border: 1px solid #ccc;
-  font-size: 14px;
+  border-radius: 5px;
+}
+
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.action-btn {
+  padding: 10px 20px;
+  background-color: #4caf50;
+  color: white;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+  transition: background-color 0.3s ease;
+}
+
+.action-btn:hover {
+  background-color: #45a049;
+}
+
+.cancel-btn {
+  padding: 10px 20px;
+  background-color: #e72a2a;
+  color: white;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+  transition: background-color 0.3s ease;
+}
+
+.cancel-btn:hover {
+  background-color: #d34242;
 }
 </style>
