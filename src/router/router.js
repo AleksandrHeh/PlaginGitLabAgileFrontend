@@ -27,6 +27,11 @@ const routes = [
     name: 'ProjectPage',
     component: () => import('@/components/ProjectPage.vue'),
   },
+  {
+    path: '/projects/:id/sprint/:sprintId',
+    name: 'SprintPage',
+    component: () => import('@/components/SprintPage.vue'),
+  },
 ];
 
 const router = createRouter({
