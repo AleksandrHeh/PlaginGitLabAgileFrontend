@@ -48,6 +48,27 @@
             <p class="task-priority" :class="task.priority">
               Приоритет: {{ getPriorityLabel(task.priority) }}
             </p>
+            <p class="task-status">
+              Статус: {{ task.status }}
+            </p>
+            <div class="task-assignee">
+              <label for="assignee">Участник:</label>
+              <select 
+                :id="'assignee-' + task.id" 
+                v-model="task.assigned_to"
+                @change="updateTaskAssignee(task.id, task.assigned_to)"
+                class="assignee-select"
+              >
+                <option :value="null">Не назначен</option>
+                <option 
+                  v-for="member in projectMembers" 
+                  :key="member.id" 
+                  :value="member.id"
+                >
+                  {{ member.name }}
+                </option>
+              </select>
+            </div>
           </li>
         </ul>
       </div>
@@ -77,6 +98,14 @@
               <option value="high">Высокий</option>
             </select>
           </div>
+          <div>
+            <label for="taskStatus">Начальный статус:</label>
+            <select id="taskStatus" v-model="newTask.status">
+              <option value="To Do">To Do</option>
+              <option value="In Progress">In Progress</option>
+              <option value="Done">Done</option>
+            </select>
+          </div>
           <div class="modal-actions">
             <button type="submit" class="action-btn">Создать задачу</button>
             <button type="button" class="cancel-btn" @click="closeTaskModal">Отменить</button>
@@ -103,10 +132,10 @@
 </template>
 
 <script>
+// eslint-disable-next-line no-unused-vars
 import Chart from 'chart.js/auto';
 import axios from 'axios';
 
-// Создаем экземпляр axios с базовым URL
 const api = axios.create({
   baseURL: 'http://localhost:4000',
   headers: {
@@ -127,6 +156,7 @@ export default {
       },
       tasks: [],
       backlogTasks: [],
+      projectMembers: [],
       draggedTask: null,
       showTaskModal: false,
       showBacklogModal: false,
@@ -134,6 +164,7 @@ export default {
         title: '',
         description: '',
         priority: 'medium',
+        status: 'To Do'
       },
       columns: [
         { title: 'To Do', tasks: [] },
@@ -150,32 +181,44 @@ export default {
     };
   },
   methods: {
+    formatDate(dateString) {
+      if (!dateString) return 'Не указана';
+      
+      const date = new Date(dateString);
+      if (isNaN(date.getTime())) return 'Некорректная дата';
+      
+      return date.toLocaleDateString('ru-RU', {
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric'
+      });
+    },
+
     async fetchSprint() {
       try {
         const token = localStorage.getItem('token');
         if (!token) {
           throw new Error('Отсутствует токен авторизации');
         }
+        if (!this.$route.params.id || !this.$route.params.sprintId) {
+          throw new Error('Отсутствуют параметры маршрута');
+        }
 
-        // Получаем данные спринта
-        const sprintResponse = await api.get(`/api/projects/${this.$route.params.id}/sprints/${this.$route.params.sprintId}`, {
+        const { data } = await api.get(`/api/projects/${this.$route.params.id}/sprints/${this.$route.params.sprintId}`, {
           headers: {
             Authorization: `Bearer ${token}`
           }
         });
-        this.sprint = sprintResponse.data;
+        this.sprint = data;
 
-        // Получаем задачи спринта
         await this.fetchSprintTasks();
-
-        // Получаем задачи из GitLab для бэклога
         await this.fetchBacklogTasks();
-
         this.assignTasksToColumns();
       } catch (error) {
         console.error('Ошибка при получении данных спринта:', error);
       }
     },
+
     async fetchSprintTasks() {
       try {
         const token = localStorage.getItem('token');
@@ -183,16 +226,33 @@ export default {
           throw new Error('Отсутствует токен авторизации');
         }
 
-        const response = await api.get(`/api/sprints/${this.$route.params.sprintId}/issues`, {
+        const { data } = await api.get(`/api/projects/${this.$route.params.id}/sprints/${this.$route.params.sprintId}/issues`, {
           headers: {
             Authorization: `Bearer ${token}`
           }
         });
-        this.tasks = response.data;
+        
+        if (data && Array.isArray(data)) {
+          this.tasks = data.map(issue => ({
+            id: issue.issue_id,
+            title: issue.title || `Задача #${issue.issue_id}`,
+            description: issue.description || "Описание отсутствует",
+            priority: issue.priority || 'medium',
+            status: issue.status || 'To Do',
+            assigned_to: issue.assigned_to
+          }));
+        } else {
+          this.tasks = [];
+        }
+        
+        this.assignTasksToColumns();
       } catch (error) {
         console.error('Ошибка при получении задач спринта:', error);
+        this.tasks = [];
+        this.assignTasksToColumns();
       }
     },
+
     async fetchBacklogTasks() {
       try {
         const token = localStorage.getItem('token');
@@ -200,16 +260,23 @@ export default {
           throw new Error('Отсутствует токен авторизации');
         }
 
-        const response = await api.get(`/api/gitlab/projects/${this.$route.params.id}/issues`, {
+        const { data } = await api.get(`/api/gitlab/projects/${this.$route.params.id}/issues`, {
           headers: {
             Authorization: `Bearer ${token}`
           }
         });
-        this.backlogTasks = response.data;
+
+        if (data && Array.isArray(data)) {
+          this.backlogTasks = data;
+        } else {
+          this.backlogTasks = [];
+        }
       } catch (error) {
         console.error('Ошибка при получении задач из бэклога:', error);
+        this.backlogTasks = [];
       }
     },
+
     async addTaskToSprint(task) {
       try {
         const token = localStorage.getItem('token');
@@ -217,38 +284,48 @@ export default {
           throw new Error('Отсутствует токен авторизации');
         }
 
-        await api.post('/api/sprints/issues', {
-          sprint_id: this.sprint.spt_id,
-          issue_id: task.id,
-          story_points: 0, // Можно добавить поле для ввода story points
-          priority: 'medium'
-        }, {
-          headers: {
-            Authorization: `Bearer ${token}`
+        await api.post(
+          `/api/projects/${this.$route.params.id}/sprints/${this.$route.params.sprintId}/issues`,
+          {
+            sprint_id: this.sprint.spt_id,
+            issue_id: task.id,
+            story_points: 0,
+            priority: 'medium',
+            name_issue: task.title,
+            description_issue: task.description || "Нет описания",
+            agile_status: 'To Do'
+          },
+          {
+            headers: {
+              Authorization: `Bearer ${token}`
+            }
           }
-        });
+        );
 
-        // Обновляем список задач спринта
-        await this.fetchSprintTasks();
+        const newTask = {
+          id: task.id,
+          title: task.title,
+          description: task.description,
+          priority: 'medium',
+          status: 'To Do'
+        };
+
+        this.tasks.push(newTask);
         this.assignTasksToColumns();
+        this.backlogTasks = this.backlogTasks.filter(t => t.id !== task.id);
         this.closeBacklogModal();
       } catch (error) {
         console.error('Ошибка при добавлении задачи в спринт:', error);
+        alert('Не удалось добавить задачу в спринт');
       }
     },
+
     assignTasksToColumns() {
       this.columns.forEach(column => {
         column.tasks = this.tasks.filter(task => task.status === column.title);
       });
     },
-    formatDate(dateString) {
-      const date = new Date(dateString);
-      return date.toLocaleDateString('ru-RU', {
-        year: 'numeric',
-        month: 'long',
-        day: 'numeric',
-      });
-    },
+
     getPriorityLabel(priority) {
       const labels = {
         low: 'Низкий',
@@ -257,60 +334,111 @@ export default {
       };
       return labels[priority] || priority;
     },
+
     goBack() {
       this.$router.push(`/projects/${this.$route.params.id}`);
     },
+
     onDragStart(task) {
       this.draggedTask = task;
     },
-    onDrop(task, targetColumn) {
+
+    async onDrop(task, targetColumn) {
       if (this.draggedTask) {
-        this.columns.forEach(column => {
-          column.tasks = column.tasks.filter(t => t.id !== this.draggedTask.id);
-        });
-        
-        targetColumn.tasks.push(this.draggedTask);
-        this.draggedTask.status = targetColumn.title;
-        
-        const taskIndex = this.tasks.findIndex(t => t.id === this.draggedTask.id);
-        if (taskIndex !== -1) {
-          this.tasks[taskIndex].status = targetColumn.title;
+        try {
+          const newStatus = targetColumn.title;
+          const token = localStorage.getItem('token');
+          
+          await api.put(
+            `/api/projects/${this.$route.params.id}/sprints/${this.$route.params.sprintId}/issues/${this.draggedTask.id}`,
+            { status: newStatus },
+            { headers: { Authorization: `Bearer ${token}` } }
+          );
+
+          this.columns.forEach(column => {
+            column.tasks = column.tasks.filter(t => t.id !== this.draggedTask.id);
+          });
+          
+          targetColumn.tasks.push(this.draggedTask);
+          this.draggedTask.status = newStatus;
+          
+          const taskIndex = this.tasks.findIndex(t => t.id === this.draggedTask.id);
+          if (taskIndex !== -1) {
+            this.tasks[taskIndex].status = newStatus;
+          }
+          
+          this.draggedTask = null;
+        } catch (error) {
+          console.error('Ошибка при обновлении статуса задачи:', error);
+          alert('Не удалось обновить статус задачи');
         }
-        
-        this.draggedTask = null;
       }
     },
+
     openTaskModal() {
       this.showTaskModal = true;
     },
+
     closeTaskModal() {
       this.showTaskModal = false;
       this.newTask = {
         title: '',
         description: '',
         priority: 'medium',
+        status: 'To Do'
       };
     },
-    createTask() {
-      const newId = Date.now();
-      const newTask = {
-        id: newId,
-        title: this.newTask.title,
-        description: this.newTask.description,
-        priority: this.newTask.priority,
-        status: 'To Do',
-        created_at: new Date().toISOString(),
-      };
-      this.tasks.push(newTask);
-      this.assignTasksToColumns();
-      this.closeTaskModal();
+
+    async createTask() {
+      try {
+        const token = localStorage.getItem('token');
+        if (!token) {
+          throw new Error('Отсутствует токен авторизации');
+        }
+
+        const { data } = await api.post(
+          `/api/projects/${this.$route.params.id}/sprints/${this.$route.params.sprintId}/issues`,
+          {
+            sprint_id: this.sprint.spt_id,
+            issue_id: Date.now(),
+            story_points: 0,
+            priority: this.newTask.priority,
+            name_issue: this.newTask.title,
+            description_issue: this.newTask.description,
+            agile_status: this.newTask.status
+          },
+          {
+            headers: {
+              Authorization: `Bearer ${token}`
+            }
+          }
+        );
+
+        const newTask = {
+          id: data.issue_id,
+          title: this.newTask.title,
+          description: this.newTask.description,
+          priority: this.newTask.priority,
+          status: this.newTask.status,
+        };
+        
+        this.tasks.push(newTask);
+        this.assignTasksToColumns();
+        this.closeTaskModal();
+      } catch (error) {
+        console.error('Ошибка при создании задачи:', error);
+        alert('Не удалось создать задачу');
+      }
     },
+
     openBacklogModal() {
       this.showBacklogModal = true;
     },
+
     closeBacklogModal() {
       this.showBacklogModal = false;
     },
+
     completeSprint() {
       if (confirm('Вы уверены, что хотите завершить этот спринт? Все незавершенные задачи будут возвращены в бэклог.')) {
         const unfinishedTasks = this.tasks.filter(task => task.status !== 'Done');
@@ -329,15 +457,38 @@ export default {
         alert('Спринт успешно завершен!');
       }
     },
+
     prepareBurnDownData() {
+      if (!this.sprint.spt_start_date || !this.sprint.spt_end_date) {
+        console.error('Отсутствуют даты начала или окончания спринта');
+        return;
+      }
+
       const startDate = new Date(this.sprint.spt_start_date);
       const endDate = new Date(this.sprint.spt_end_date);
+      
+      if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) {
+        console.error('Некорректные даты для графика');
+        return;
+      }
+
       const totalDays = Math.ceil((endDate - startDate) / (1000 * 60 * 60 * 24)) + 1;
       const totalTasks = this.tasks.length;
       
-      this.burnDownData.ideal = Array.from({length: totalDays}, (_, i) => {
-        return totalTasks - (i * (totalTasks / (totalDays - 1)));
-      });
+      if (totalDays <= 0) {
+        console.error('Некорректный период для графика');
+        return;
+      }
+
+      this.burnDownData = {
+        ideal: [],
+        actual: [],
+        dates: []
+      };
+      
+      for (let i = 0; i < totalDays; i++) {
+        this.burnDownData.ideal.push(totalTasks - (i * (totalTasks / (totalDays - 1))));
+      }
       
       const doneTasks = this.tasks.filter(task => task.status === 'Done').length;
       const currentDay = Math.min(
@@ -345,81 +496,105 @@ export default {
         totalDays
       );
       
-      this.burnDownData.actual = Array.from({length: totalDays}, (_, i) => {
+      for (let i = 0; i < totalDays; i++) {
         if (i < currentDay) {
-          return totalTasks - (doneTasks * (i / currentDay));
+          this.burnDownData.actual.push(totalTasks - (doneTasks * (i / currentDay)));
+        } else {
+          this.burnDownData.actual.push(null);
         }
-        return null;
-      });
+      }
       
-      this.burnDownData.dates = Array.from({length: totalDays}, (_, i) => {
+      for (let i = 0; i < totalDays; i++) {
         const date = new Date(startDate);
         date.setDate(date.getDate() + i);
-        return this.formatChartDate(date);
-      });
+        this.burnDownData.dates.push(this.formatChartDate(date));
+      }
     },
+
     formatChartDate(date) {
       return date.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' });
     },
+
     renderBurnDownChart() {
+      if (!this.$refs.burnDownChart) {
+        console.error('Canvas элемент не найден');
+        return;
+      }
+
+      const ctx = this.$refs.burnDownChart.getContext('2d');
+      if (!ctx) {
+        console.error('Не удалось получить контекст canvas');
+        return;
+      }
+
+      if (!this.burnDownData.dates.length || !this.burnDownData.ideal.length) {
+        console.error('Нет данных для отображения графика');
+        return;
+      }
+
       if (this.chart) {
         this.chart.destroy();
       }
-      
-      const ctx = this.$refs.burnDownChart.getContext('2d');
-      this.chart = new Chart(ctx, {
-        type: 'line',
-        data: {
-          labels: this.burnDownData.dates,
-          datasets: [
-            {
-              label: 'Идеальное сгорание',
-              data: this.burnDownData.ideal,
-              borderColor: '#3498db',
-              backgroundColor: 'transparent',
-              borderWidth: 2,
-              borderDash: [5, 5],
-              tension: 0.1
-            },
-            {
-              label: 'Фактическое сгорание',
-              data: this.burnDownData.actual,
-              borderColor: '#2ecc71',
-              backgroundColor: 'transparent',
-              borderWidth: 3,
-              tension: 0.1
-            }
-          ]
-        },
-        options: {
-          responsive: true,
-          plugins: {
-            legend: {
-              position: 'top',
-            },
-            tooltip: {
-              mode: 'index',
-              intersect: false,
-            }
+
+      try {
+        this.chart = new Chart(ctx, {
+          type: 'line',
+          data: {
+            labels: this.burnDownData.dates,
+            datasets: [
+              {
+                label: 'Идеальное сгорание',
+                data: this.burnDownData.ideal,
+                borderColor: '#3498db',
+                backgroundColor: 'transparent',
+                borderWidth: 2,
+                borderDash: [5, 5],
+                tension: 0.1
+              },
+              {
+                label: 'Фактическое сгорание',
+                data: this.burnDownData.actual,
+                borderColor: '#2ecc71',
+                backgroundColor: 'transparent',
+                borderWidth: 3,
+                tension: 0.1
+              }
+            ]
           },
-          scales: {
-            y: {
-              beginAtZero: true,
-              title: {
-                display: true,
-                text: 'Осталось задач'
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+              legend: {
+                position: 'top',
+              },
+              tooltip: {
+                mode: 'index',
+                intersect: false,
               }
             },
-            x: {
-              title: {
-                display: true,
-                text: 'Дни спринта'
+            scales: {
+              y: {
+                beginAtZero: true,
+                title: {
+                  display: true,
+                  text: 'Осталось задач'
+                }
+              },
+              x: {
+                title: {
+                  display: true,
+                  text: 'Дни спринта'
+                }
               }
             }
           }
-        }
-      });
+        });
+      } catch (error) {
+        console.error('Ошибка при создании графика:', error);
+      }
     },
+
     checkSprintCompletion() {
       const today = new Date();
       today.setHours(0, 0, 0, 0);
@@ -427,21 +602,83 @@ export default {
       
       this.canCompleteSprint = today >= endDate || 
         this.tasks.every(task => task.status === 'Done');
+    },
+
+    async fetchProjectMembers() {
+      try {
+        const token = localStorage.getItem('token');
+        if (!token) {
+          throw new Error('Отсутствует токен авторизации');
+        }
+
+        const { data } = await api.get(`/api/users`, {
+          headers: {
+            Authorization: `Bearer ${token}`
+          }
+        });
+        this.projectMembers = data;
+      } catch (error) {
+        console.error('Ошибка при получении участников проекта:', error);
+      }
+    },
+
+    async updateTaskAssignee(taskId, assigneeId) {
+      try {
+        const token = localStorage.getItem('token');
+        if (!token) {
+          throw new Error('Отсутствует токен авторизации');
+        }
+
+        await api.put(
+          `/api/projects/${this.$route.params.id}/sprints/${this.$route.params.sprintId}/issues/assignee`,
+          {
+            issue_id: taskId,
+            assignee_id: assigneeId
+          },
+          {
+            headers: {
+              Authorization: `Bearer ${token}`
+            }
+          }
+        );
+
+        // Обновляем задачу в локальном состоянии
+        const taskIndex = this.tasks.findIndex(t => t.id === taskId);
+        if (taskIndex !== -1) {
+          this.tasks[taskIndex].assigned_to = assigneeId;
+          this.assignTasksToColumns();
+        }
+      } catch (error) {
+        console.error('Ошибка при обновлении участника задачи:', error);
+      }
+    },
+
+    getAssigneeName(assigneeId) {
+      if (!assigneeId) return 'Не назначен';
+      const member = this.projectMembers.find(m => m.id === assigneeId);
+      return member ? member.name : 'Неизвестный участник';
     }
   },
-  mounted() {
-    this.fetchSprint().then(() => {
+  async mounted() {
+    try {
+      await this.fetchSprint();
+      await this.fetchProjectMembers();
       this.prepareBurnDownData();
+      await this.$nextTick();
       this.renderBurnDownChart();
       this.checkSprintCompletion();
-    });
+    } catch (error) {
+      console.error('Ошибка при загрузке страницы:', error);
+    }
   },
   watch: {
     tasks: {
       deep: true,
       handler() {
         this.prepareBurnDownData();
-        this.renderBurnDownChart();
+        this.$nextTick(() => {
+          this.renderBurnDownChart();
+        });
         this.checkSprintCompletion();
       }
     }
@@ -450,6 +687,24 @@ export default {
 </script>
 
 <style scoped>
+/* Стили остаются без изменений */
+
+.task-status {
+  font-size: 0.85rem;
+  color: #555;
+  margin-top: 0.5rem;
+  padding: 0.2rem 0.5rem;
+  background-color: #f0f0f0;
+  border-radius: 4px;
+  display: inline-block;
+}
+
+/* Остальные стили остаются без изменений */
+.sprint-page {
+  padding: 2rem;
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  color: #2c3e50;
+}
 .sprint-page {
   padding: 2rem;
   font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
@@ -861,5 +1116,34 @@ h1 {
   .backlog-item button {
     align-self: flex-end;
   }
+}
+
+.task-assignee {
+  margin-top: 0.5rem;
+  padding: 0.5rem;
+  background-color: #f8f9fa;
+  border-radius: 4px;
+}
+
+.task-assignee label {
+  display: block;
+  margin-bottom: 0.3rem;
+  font-size: 0.9rem;
+  color: #666;
+}
+
+.assignee-select {
+  width: 100%;
+  padding: 0.4rem;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 0.9rem;
+  background-color: white;
+}
+
+.assignee-select:focus {
+  outline: none;
+  border-color: #3498db;
+  box-shadow: 0 0 0 2px rgba(52, 152, 219, 0.2);
 }
 </style>
