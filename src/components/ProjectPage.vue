@@ -37,19 +37,43 @@
       <!-- Список задач -->
       <div class="tasks-section">
         <h2>Задачи проекта</h2>
-        <ul v-if="tasks.length > 0" class="tasks-list">
-          <li v-for="task in tasks" :key="task.id" class="task-item">
-            <div class="task-content">
-              <p><strong>Задача:</strong> {{ task.title }}</p>
-              <p><strong>Описание:</strong> {{ task.description || "Нет описания" }}</p>
-              <p><strong>Статус:</strong> {{ task.state }}</p>
-              <p><strong>Автор:</strong> {{ task.author?.name || "Неизвестно" }}</p>
-              <p><strong>Дата создания:</strong> {{ formatDate(task.created_at) }}</p>
-            </div>
-            <span class="delete-icon" @click.stop="openDeleteModal(task)">&#128465;</span>
-          </li>
-        </ul>
-        <div v-else class="no-tasks">
+        
+        <!-- Активные задачи -->
+        <div v-if="activeTasks.length > 0">
+          <h3>Активные задачи</h3>
+          <ul class="tasks-list">
+            <li v-for="task in activeTasks" :key="task.id" class="task-item">
+              <div class="task-content">
+                <p><strong>Задача:</strong> {{ task.title }}</p>
+                <p><strong>Описание:</strong> {{ task.description || "Нет описания" }}</p>
+                <p><strong>Статус:</strong> {{ task.state }}</p>
+                <p><strong>Автор:</strong> {{ task.author?.name || "Неизвестно" }}</p>
+                <p><strong>Дата создания:</strong> {{ formatDate(task.created_at) }}</p>
+              </div>
+              <span class="delete-icon" @click.stop="openDeleteModal(task)">&#128465;</span>
+            </li>
+          </ul>
+        </div>
+
+        <!-- Закрытые задачи -->
+        <div v-if="closedTasks.length > 0" class="closed-tasks">
+          <h3>Закрытые задачи</h3>
+          <ul class="tasks-list">
+            <li v-for="task in closedTasks" :key="task.id" class="task-item closed">
+              <div class="task-content">
+                <p><strong>Задача:</strong> {{ task.title }}</p>
+                <p><strong>Описание:</strong> {{ task.description || "Нет описания" }}</p>
+                <p><strong>Статус:</strong> {{ task.state }}</p>
+                <p><strong>Автор:</strong> {{ task.author?.name || "Неизвестно" }}</p>
+                <p><strong>Дата создания:</strong> {{ formatDate(task.created_at) }}</p>
+                <p><strong>Дата закрытия:</strong> {{ formatDate(task.closed_at) }}</p>
+              </div>
+              <span class="delete-icon" @click.stop="openDeleteModal(task)">&#128465;</span>
+            </li>
+          </ul>
+        </div>
+
+        <div v-if="!activeTasks.length && !closedTasks.length" class="no-tasks">
           Нет доступных задач.
         </div>
       </div>
@@ -409,6 +433,14 @@ export default {
       this.$router.push(`/projects/${this.$route.params.id}/sprint/${sprintId}`);
     },
   },
+  computed: {
+    activeTasks() {
+      return this.tasks.filter(task => task.state !== 'closed');
+    },
+    closedTasks() {
+      return this.tasks.filter(task => task.state === 'closed');
+    }
+  },
   created() {
     this.fetchProject();
   },
@@ -739,5 +771,42 @@ h2::before {
   max-height: 90vh;
     overflow-y: auto;
   }
+}
+
+.closed-tasks {
+  margin-top: 2rem;
+  padding-top: 2rem;
+  border-top: 1px solid #eee;
+}
+
+.closed-tasks h3 {
+  color: #7f8c8d;
+  font-size: 1.4rem;
+  margin-bottom: 1rem;
+}
+
+.task-item.closed {
+  background-color: #f8f9fa;
+  border-left-color: #95a5a6;
+  opacity: 0.8;
+}
+
+.task-item.closed .task-content {
+  color: #7f8c8d;
+}
+
+.task-item.closed .task-content strong {
+  color: #95a5a6;
+}
+
+.task-item.closed:hover {
+  opacity: 1;
+}
+
+h3 {
+  font-size: 1.4rem;
+  color: #2c3e50;
+  margin: 1.5rem 0 1rem;
+  font-weight: 500;
 }
 </style>

@@ -43,7 +43,10 @@
             @dragover.prevent
             @drop="onDrop(task, column)"
           >
-            <p><strong>{{ task.title }}</strong></p>
+            <div class="task-header">
+              <p class="task-id">#{{ task.id }}</p>
+              <p class="task-title"><strong>{{ task.title }}</strong></p>
+            </div>
             <p>{{ task.description || "Нет описания" }}</p>
             <p class="task-priority" :class="task.priority">
               Приоритет: {{ getPriorityLabel(task.priority) }}
@@ -101,9 +104,10 @@
           <div>
             <label for="taskStatus">Начальный статус:</label>
             <select id="taskStatus" v-model="newTask.status">
-              <option value="To Do">To Do</option>
-              <option value="In Progress">In Progress</option>
-              <option value="Done">Done</option>
+              <option value="К выполнению">К выполнению</option>
+              <option value="В работе">В работе</option>
+              <option value="На проверке">На проверке</option>
+              <option value="Готово">Готово</option>
             </select>
           </div>
           <div class="modal-actions">
@@ -126,6 +130,88 @@
           </li>
         </ul>
         <button @click="closeBacklogModal" class="cancel-btn">Закрыть</button>
+      </div>
+    </div>
+
+    <!-- Модальное окно для отчета по спринту -->
+    <div v-if="showSprintReportModal" class="modal-overlay" @click.self="closeSprintReportModal">
+      <div class="modal sprint-report-modal">
+        <h2>Отчет по спринту "{{ sprint.spt_title }}"</h2>
+        
+        <div class="report-content">
+          <div class="report-section">
+            <h3>Общая информация</h3>
+            <div class="report-grid">
+              <div class="report-item">
+                <span class="label">Дата начала:</span>
+                <span class="value">{{ formatDate(sprint.spt_start_date) }}</span>
+              </div>
+              <div class="report-item">
+                <span class="label">Дата окончания:</span>
+                <span class="value">{{ formatDate(sprint.spt_end_date) }}</span>
+              </div>
+              <div class="report-item">
+                <span class="label">Всего задач:</span>
+                <span class="value">{{ sprintReport.totalTasks }}</span>
+              </div>
+              <div class="report-item">
+                <span class="label">Выполнено задач:</span>
+                <span class="value">{{ sprintReport.completedTasks }}</span>
+              </div>
+              <div class="report-item">
+                <span class="label">Процент выполнения:</span>
+                <span class="value">{{ sprintReport.completionPercentage }}%</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="report-section">
+            <h3>Статистика по задачам</h3>
+            <div class="report-grid">
+              <div class="report-item">
+                <span class="label">Задачи в работе:</span>
+                <span class="value">{{ sprintReport.inProgressTasks }}</span>
+              </div>
+              <div class="report-item">
+                <span class="label">Задачи на проверке:</span>
+                <span class="value">{{ sprintReport.inReviewTasks }}</span>
+              </div>
+              <div class="report-item">
+                <span class="label">Незавершенные задачи:</span>
+                <span class="value">{{ sprintReport.unfinishedTasks }}</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="report-section">
+            <h3>Участники спринта</h3>
+            <div class="team-stats">
+              <div v-for="member in sprintReport.teamStats" :key="member.id" class="member-stat">
+                <span class="member-name">{{ member.name }}</span>
+                <div class="member-tasks">
+                  <span class="task-count">Выполнено: {{ member.completedTasks }}</span>
+                  <span class="task-count">В работе: {{ member.inProgressTasks }}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="report-section">
+            <h3>Незавершенные задачи</h3>
+            <ul class="unfinished-tasks-list">
+              <li v-for="task in sprintReport.unfinishedTasksList" :key="task.id" class="unfinished-task">
+                <span class="task-id">#{{ task.id }}</span>
+                <span class="task-title">{{ task.title }}</span>
+                <span class="task-status" :class="task.status.toLowerCase()">{{ task.status }}</span>
+              </li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="modal-actions">
+          <button @click="downloadReport" class="action-btn">Скачать отчет</button>
+          <button @click="closeSprintReportModal" class="cancel-btn">Закрыть</button>
+        </div>
       </div>
     </div>
   </div>
@@ -164,12 +250,13 @@ export default {
         title: '',
         description: '',
         priority: 'medium',
-        status: 'To Do'
+        status: 'К выполнению'
       },
       columns: [
-        { title: 'To Do', tasks: [] },
-        { title: 'In Progress', tasks: [] },
-        { title: 'Done', tasks: [] },
+        { title: 'К выполнению', tasks: [] },
+        { title: 'В работе', tasks: [] },
+        { title: 'На проверке', tasks: [] },
+        { title: 'Готово', tasks: [] },
       ],
       burnDownData: {
         ideal: [],
@@ -177,7 +264,18 @@ export default {
         dates: []
       },
       chart: null,
-      canCompleteSprint: false
+      canCompleteSprint: false,
+      showSprintReportModal: false,
+      sprintReport: {
+        totalTasks: 0,
+        completedTasks: 0,
+        completionPercentage: 0,
+        inProgressTasks: 0,
+        inReviewTasks: 0,
+        unfinishedTasks: 0,
+        teamStats: [],
+        unfinishedTasksList: []
+      }
     };
   },
   methods: {
@@ -238,7 +336,7 @@ export default {
             title: issue.title || `Задача #${issue.issue_id}`,
             description: issue.description || "Описание отсутствует",
             priority: issue.priority || 'medium',
-            status: issue.status || 'To Do',
+            status: issue.status || 'К выполнению',
             assigned_to: issue.assigned_to
           }));
         } else {
@@ -267,7 +365,9 @@ export default {
         });
 
         if (data && Array.isArray(data)) {
-          this.backlogTasks = data;
+          // Фильтруем задачи, исключая те, которые уже есть в спринте
+          const sprintTaskIds = this.tasks.map(task => task.id);
+          this.backlogTasks = data.filter(task => !sprintTaskIds.includes(task.id));
         } else {
           this.backlogTasks = [];
         }
@@ -293,7 +393,7 @@ export default {
             priority: 'medium',
             name_issue: task.title,
             description_issue: task.description || "Нет описания",
-            agile_status: 'To Do'
+            agile_status: 'К выполнению'
           },
           {
             headers: {
@@ -307,7 +407,7 @@ export default {
           title: task.title,
           description: task.description,
           priority: 'medium',
-          status: 'To Do'
+          status: 'К выполнению'
         };
 
         this.tasks.push(newTask);
@@ -385,7 +485,7 @@ export default {
         title: '',
         description: '',
         priority: 'medium',
-        status: 'To Do'
+        status: 'К выполнению'
       };
     },
 
@@ -432,6 +532,7 @@ export default {
     },
 
     openBacklogModal() {
+      this.fetchBacklogTasks(); // Обновляем список задач при открытии модального окна
       this.showBacklogModal = true;
     },
 
@@ -439,23 +540,119 @@ export default {
       this.showBacklogModal = false;
     },
 
-    completeSprint() {
-      if (confirm('Вы уверены, что хотите завершить этот спринт? Все незавершенные задачи будут возвращены в бэклог.')) {
-        const unfinishedTasks = this.tasks.filter(task => task.status !== 'Done');
-        this.backlogTasks = [...this.backlogTasks, ...unfinishedTasks.map(task => ({
+    async completeSprint() {
+      if (confirm('Вы уверены, что хотите завершить этот спринт? Будет создан отчет по результатам спринта.')) {
+        try {
+          const token = localStorage.getItem('token');
+          if (!token) {
+            throw new Error('Отсутствует токен авторизации');
+          }
+
+          // Обновляем статус спринта на сервере
+          await api.put(
+            `/api/projects/${this.$route.params.id}/sprints/${this.$route.params.sprintId}/complete`,
+            {},
+            {
+              headers: {
+                Authorization: `Bearer ${token}`
+              }
+            }
+          );
+
+          // Генерируем отчет
+          await this.generateSprintReport();
+          
+          // Показываем модальное окно с отчетом
+          this.showSprintReportModal = true;
+          
+          // Обновляем статус спринта локально
+          this.sprint.is_completed = true;
+          this.sprint.end_date = new Date().toISOString().split('T')[0];
+          
+        } catch (error) {
+          console.error('Ошибка при завершении спринта:', error);
+          alert('Не удалось завершить спринт');
+        }
+      }
+    },
+
+    async generateSprintReport() {
+      const completedTasks = this.tasks.filter(task => task.status === 'Готово');
+      const inProgressTasks = this.tasks.filter(task => task.status === 'В работе');
+      const inReviewTasks = this.tasks.filter(task => task.status === 'На проверке');
+      const unfinishedTasks = this.tasks.filter(task => task.status !== 'Готово');
+
+      // Собираем статистику по участникам
+      const teamStats = this.projectMembers.map(member => {
+        const memberTasks = this.tasks.filter(task => task.assigned_to === member.id);
+        return {
+          id: member.id,
+          name: member.name,
+          completedTasks: memberTasks.filter(task => task.status === 'Готово').length,
+          inProgressTasks: memberTasks.filter(task => task.status === 'В работе').length
+        };
+      });
+
+      this.sprintReport = {
+        totalTasks: this.tasks.length,
+        completedTasks: completedTasks.length,
+        completionPercentage: Math.round((completedTasks.length / this.tasks.length) * 100) || 0,
+        inProgressTasks: inProgressTasks.length,
+        inReviewTasks: inReviewTasks.length,
+        unfinishedTasks: unfinishedTasks.length,
+        teamStats: teamStats,
+        unfinishedTasksList: unfinishedTasks.map(task => ({
           id: task.id,
           title: task.title,
-          description: task.description
-        }))];
-        
-        this.tasks = this.tasks.filter(task => task.status === 'Done');
-        this.assignTasksToColumns();
-        
-        this.sprint.is_completed = true;
-        this.sprint.end_date = new Date().toISOString().split('T')[0];
-        
-        alert('Спринт успешно завершен!');
-      }
+          status: task.status
+        }))
+      };
+    },
+
+    closeSprintReportModal() {
+      this.showSprintReportModal = false;
+    },
+
+    downloadReport() {
+      const reportData = {
+        sprintTitle: this.sprint.spt_title,
+        startDate: this.formatDate(this.sprint.spt_start_date),
+        endDate: this.formatDate(this.sprint.spt_end_date),
+        ...this.sprintReport
+      };
+
+      const reportContent = `
+Отчет по спринту "${reportData.sprintTitle}"
+Дата начала: ${reportData.startDate}
+Дата окончания: ${reportData.endDate}
+
+Общая статистика:
+- Всего задач: ${reportData.totalTasks}
+- Выполнено задач: ${reportData.completedTasks}
+- Процент выполнения: ${reportData.completionPercentage}%
+- Задачи в работе: ${reportData.inProgressTasks}
+- Задачи на проверке: ${reportData.inReviewTasks}
+- Незавершенные задачи: ${reportData.unfinishedTasks}
+
+Статистика по участникам:
+${reportData.teamStats.map(member => `
+${member.name}:
+- Выполнено задач: ${member.completedTasks}
+- Задач в работе: ${member.inProgressTasks}`).join('\n')}
+
+Незавершенные задачи:
+${reportData.unfinishedTasksList.map(task => `#${task.id} - ${task.title} (${task.status})`).join('\n')}
+      `;
+
+      const blob = new Blob([reportContent], { type: 'text/plain;charset=utf-8' });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `sprint-report-${this.sprint.spt_title}-${new Date().toISOString().split('T')[0]}.txt`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
     },
 
     prepareBurnDownData() {
@@ -490,7 +687,7 @@ export default {
         this.burnDownData.ideal.push(totalTasks - (i * (totalTasks / (totalDays - 1))));
       }
       
-      const doneTasks = this.tasks.filter(task => task.status === 'Done').length;
+      const doneTasks = this.tasks.filter(task => task.status === 'Готово').length;
       const currentDay = Math.min(
         Math.ceil((new Date() - startDate) / (1000 * 60 * 60 * 24)) + 1,
         totalDays
@@ -534,6 +731,7 @@ export default {
 
       if (this.chart) {
         this.chart.destroy();
+        this.chart = null;
       }
 
       try {
@@ -549,7 +747,8 @@ export default {
                 backgroundColor: 'transparent',
                 borderWidth: 2,
                 borderDash: [5, 5],
-                tension: 0.1
+                tension: 0.1,
+                fill: false
               },
               {
                 label: 'Фактическое сгорание',
@@ -557,13 +756,17 @@ export default {
                 borderColor: '#2ecc71',
                 backgroundColor: 'transparent',
                 borderWidth: 3,
-                tension: 0.1
+                tension: 0.1,
+                fill: false
               }
             ]
           },
           options: {
             responsive: true,
             maintainAspectRatio: false,
+            animation: {
+              duration: 0
+            },
             plugins: {
               legend: {
                 position: 'top',
@@ -601,7 +804,7 @@ export default {
       const endDate = new Date(this.sprint.spt_end_date);
       
       this.canCompleteSprint = today >= endDate || 
-        this.tasks.every(task => task.status === 'Done');
+        this.tasks.every(task => task.status === 'Готово');
     },
 
     async fetchProjectMembers() {
@@ -665,10 +868,19 @@ export default {
       await this.fetchProjectMembers();
       this.prepareBurnDownData();
       await this.$nextTick();
-      this.renderBurnDownChart();
+      setTimeout(() => {
+        this.renderBurnDownChart();
+      }, 100);
       this.checkSprintCompletion();
     } catch (error) {
       console.error('Ошибка при загрузке страницы:', error);
+    }
+  },
+  beforeUnmount() {
+    // Уничтожаем график при размонтировании компонента
+    if (this.chart) {
+      this.chart.destroy();
+      this.chart = null;
     }
   },
   watch: {
@@ -1145,5 +1357,176 @@ h1 {
   outline: none;
   border-color: #3498db;
   box-shadow: 0 0 0 2px rgba(52, 152, 219, 0.2);
+}
+
+.task-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.task-id {
+  color: #666;
+  font-size: 0.9rem;
+  font-weight: 600;
+  background-color: #f0f0f0;
+  padding: 0.2rem 0.5rem;
+  border-radius: 4px;
+  margin: 0;
+}
+
+.task-title {
+  margin: 0;
+  flex: 1;
+}
+
+.sprint-report-modal {
+  max-width: 800px;
+}
+
+.report-content {
+  margin: 1.5rem 0;
+}
+
+.report-section {
+  margin-bottom: 2rem;
+  padding: 1rem;
+  background-color: #f8f9fa;
+  border-radius: 8px;
+}
+
+.report-section h3 {
+  color: #2c3e50;
+  margin: 0 0 1rem 0;
+  font-size: 1.2rem;
+  border-bottom: 2px solid #eee;
+  padding-bottom: 0.5rem;
+}
+
+.report-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 1rem;
+}
+
+.report-item {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.report-item .label {
+  font-size: 0.9rem;
+  color: #666;
+}
+
+.report-item .value {
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: #2c3e50;
+}
+
+.team-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 1rem;
+}
+
+.member-stat {
+  background-color: white;
+  padding: 1rem;
+  border-radius: 6px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.member-name {
+  font-weight: 600;
+  color: #2c3e50;
+  display: block;
+  margin-bottom: 0.5rem;
+}
+
+.member-tasks {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.task-count {
+  font-size: 0.9rem;
+  color: #666;
+}
+
+.unfinished-tasks-list {
+  list-style: none;
+  padding: 0;
+  display: grid;
+  gap: 0.8rem;
+}
+
+.unfinished-task {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  background-color: white;
+  padding: 0.8rem;
+  border-radius: 6px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.task-id {
+  color: #666;
+  font-size: 0.9rem;
+  font-weight: 600;
+  background-color: #f0f0f0;
+  padding: 0.2rem 0.5rem;
+  border-radius: 4px;
+}
+
+.task-title {
+  flex: 1;
+}
+
+.task-status {
+  font-size: 0.85rem;
+  padding: 0.2rem 0.5rem;
+  border-radius: 4px;
+  background-color: #f0f0f0;
+}
+
+.task-status.в\ работе {
+  background-color: #fff8e1;
+  color: #f57f17;
+}
+
+.task-status.на\ проверке {
+  background-color: #e3f2fd;
+  color: #1565c0;
+}
+
+.task-status.к\ выполнению {
+  background-color: #f5f5f5;
+  color: #616161;
+}
+
+@media (max-width: 768px) {
+  .report-grid {
+    grid-template-columns: 1fr;
+  }
+  
+  .team-stats {
+    grid-template-columns: 1fr;
+  }
+  
+  .unfinished-task {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.5rem;
+  }
+  
+  .task-status {
+    align-self: flex-start;
+  }
 }
 </style>

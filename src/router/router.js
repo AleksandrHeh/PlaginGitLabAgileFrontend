@@ -32,6 +32,12 @@ const routes = [
     name: 'SprintPage',
     component: () => import('@/components/SprintPage.vue'),
   },
+  {
+    path: '/projects/:id/sprint/:sprintId/task/:taskId',
+    name: 'TaskPage',
+    component: () => import('@/components/TaskPage.vue'),
+    meta: { requiresAuth: true }
+  },
 ];
 
 const router = createRouter({

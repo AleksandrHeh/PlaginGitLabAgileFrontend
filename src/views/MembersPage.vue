@@ -29,8 +29,8 @@
             <h3>{{ member.name || "Неизвестный пользователь" }}</h3>
             <p class="email">{{ member.email || "Email не указан" }}</p>
             <div class="meta">
-              <span class="role" :class="member.role.toLowerCase()">
-                {{ member.role || "Гость" }}
+              <span class="role" :class="getRoleClass(member.role)">
+                {{ getRoleLabel(member.role) }}
               </span>
               <span class="date">
                 {{ formatDate(member.created_at) }}
@@ -57,7 +57,13 @@ export default {
       loading: true,
       error: null,
       retryCount: 0,
-      maxRetries: 3
+      maxRetries: 3,
+      roleLabels: {
+        'Admin': 'Администратор',
+        'Maintainer': 'Менеджер',
+        'Developer': 'Разработчик',
+        'Guest': 'Гость'
+      }
     };
   },
   methods: {
@@ -136,6 +142,20 @@ export default {
         .join('')
         .toUpperCase()
         .substring(0, 2);
+    },
+
+    getRoleLabel(role) {
+      return this.roleLabels[role] || role;
+    },
+
+    getRoleClass(role) {
+      const roleMap = {
+        'Admin': 'admin',
+        'Maintainer': 'maintainer',
+        'Developer': 'developer',
+        'Guest': 'guest'
+      };
+      return roleMap[role] || 'guest';
     }
   },
   mounted() {
@@ -242,8 +262,7 @@ h2 {
 .role {
   padding: 2px 8px;
   border-radius: 12px;
-  background-color: #ecf0f1;
-  color: #2c3e50;
+  font-weight: 500;
 }
 
 .role.admin {
@@ -258,6 +277,11 @@ h2 {
 
 .role.developer {
   background-color: #3498db;
+  color: white;
+}
+
+.role.guest {
+  background-color: #95a5a6;
   color: white;
 }
 
