@@ -1,345 +1,583 @@
 <template>
-  <div class="members-view">
-    <div class="header">
-      <h2>Участники системы</h2>
-      <button @click="refreshMembers" class="refresh-button" :disabled="loading">
-        <span v-if="!loading">Обновить</span>
-        <span v-else>Обновление...</span>
-      </button>
+  <div class="members-page">
+    <h1>Участники проекта</h1>
+    
+    <div v-if="loading" class="loading">
+      Загрузка участников...
     </div>
     
-    <div v-if="loading" class="loading-state">
-      <div class="spinner"></div>
-      <p>Загрузка данных участников...</p>
+    <div v-else-if="error" class="error">
+      {{ error }}
     </div>
     
-    <div v-else-if="error" class="error-state">
-      <div class="error-icon">⚠️</div>
-      <p>{{ error }}</p>
-      <button @click="fetchMembers" class="retry-button">Попробовать снова</button>
-    </div>
-    
-    <template v-else>
-      <div v-if="members.length > 0" class="members-container">
-        <div class="member-card" v-for="member in members" :key="member.id">
+    <div v-else>
+      <!-- Поиск и фильтрация -->
+      <div class="search-section">
+        <input 
+          type="text" 
+          v-model="searchQuery" 
+          placeholder="Поиск участников..." 
+          class="search-input"
+        />
+        <select v-model="roleFilter" class="role-filter">
+          <option value="">Все роли</option>
+          <option value="admin">Администратор</option>
+          <option value="manager">Менеджер</option>
+          <option value="developer">Разработчик</option>
+          <option value="tester">Тестировщик</option>
+        </select>
+      </div>
+
+      <!-- Список участников -->
+      <div class="members-grid">
+        <div v-for="member in filteredMembers" :key="member.id" class="member-card">
           <div class="member-avatar">
-            {{ getInitials(member.name) }}
+            <img :src="member.avatar_url || '/default-avatar.png'" :alt="member.name">
           </div>
-          <div class="member-details">
-            <h3>{{ member.name || "Неизвестный пользователь" }}</h3>
-            <p class="email">{{ member.email || "Email не указан" }}</p>
-            <div class="meta">
-              <span class="role" :class="getRoleClass(member.role)">
-                {{ getRoleLabel(member.role) }}
-              </span>
-              <span class="date">
-                {{ formatDate(member.created_at) }}
-              </span>
-            </div>
+          <div class="member-info">
+            <h3>{{ member.name }}</h3>
+            <p class="member-username">@{{ member.username }}</p>
+            <p class="member-role" :class="member.userSettings?.us_role || 'developer'">
+              {{ getRoleName(member.userSettings?.us_role) }}
+            </p>
+            <p class="member-email">{{ member.email }}</p>
+            <p class="member-joined">
+              Участник с {{ formatDate(member.created_at) }}
+            </p>
+          </div>
+          <div class="member-actions">
+            <button 
+              v-if="canManageMembers" 
+              @click="openEditModal(member)"
+              class="action-btn edit-btn"
+            >
+              Изменить роль
+            </button>
+            <button 
+              v-if="canManageMembers && member.id !== currentUserId" 
+              @click="openRemoveModal(member)"
+              class="action-btn remove-btn"
+            >
+              Удалить
+            </button>
           </div>
         </div>
       </div>
-      
-      <div v-else class="empty-state">
-        <div class="empty-icon">👤</div>
-        <p>Нет доступных участников</p>
-        <button @click="fetchMembers" class="retry-button">Проверить снова</button>
+
+      <!-- Модальное окно изменения роли -->
+      <div v-if="showEditModal" class="modal-overlay" @click.self="closeEditModal">
+        <div class="modal">
+          <h2>Изменение роли участника</h2>
+          <div class="modal-content">
+            <p><strong>Участник:</strong> {{ selectedMember?.name }}</p>
+            <div class="form-group">
+              <label for="newRole">Новая роль:</label>
+              <select id="newRole" v-model="newRole" class="role-select">
+                <option value="admin">Администратор</option>
+                <option value="manager">Менеджер</option>
+                <option value="developer">Разработчик</option>
+                <option value="tester">Тестировщик</option>
+              </select>
+            </div>
+          </div>
+          <div class="modal-actions">
+            <button @click="updateMemberRole" class="action-btn">Сохранить</button>
+            <button @click="closeEditModal" class="cancel-btn">Отмена</button>
+          </div>
+        </div>
       </div>
-    </template>
+
+      <!-- Модальное окно подтверждения удаления -->
+      <div v-if="showRemoveModal" class="modal-overlay" @click.self="closeRemoveModal">
+        <div class="modal">
+          <h2>Удаление участника</h2>
+          <p>Вы уверены, что хотите удалить участника "{{ selectedMember?.name }}" из проекта?</p>
+          <div class="modal-actions">
+            <button @click="removeMember" class="action-btn remove-btn">Удалить</button>
+            <button @click="closeRemoveModal" class="cancel-btn">Отмена</button>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
 <script>
+import axios from 'axios';
+import { useToast } from 'vue-toastification';
+
+const api = axios.create({
+  baseURL: 'http://localhost:4000',
+  headers: {
+    'Content-Type': 'application/json',
+  }
+});
+
 export default {
+  name: 'MembersPage',
   data() {
     return {
       members: [],
       loading: true,
       error: null,
-      retryCount: 0,
-      maxRetries: 3,
-      roleLabels: {
-        'Admin': 'Администратор',
-        'Maintainer': 'Менеджер',
-        'Developer': 'Разработчик',
-        'Guest': 'Гость'
-      }
+      searchQuery: '',
+      roleFilter: '',
+      showEditModal: false,
+      showRemoveModal: false,
+      selectedMember: null,
+      newRole: '',
+      currentUserId: null,
+      toast: useToast()
     };
+  },
+  computed: {
+    filteredMembers() {
+      return this.members.filter(member => {
+        const matchesSearch = member.name.toLowerCase().includes(this.searchQuery.toLowerCase()) ||
+                            member.username.toLowerCase().includes(this.searchQuery.toLowerCase());
+        const matchesRole = !this.roleFilter || member.userSettings?.us_role === this.roleFilter;
+        return matchesSearch && matchesRole;
+      });
+    },
+    canManageMembers() {
+      // Проверяем, является ли текущий пользователь администратором или менеджером
+      const currentMember = this.members.find(m => m.id === this.currentUserId);
+      return currentMember && ['admin', 'manager'].includes(currentMember.userSettings?.us_role);
+    }
   },
   methods: {
     async fetchMembers() {
-      this.loading = true;
-      this.error = null;
-      
-      const token = localStorage.getItem('token');
-      if (!token) {
-        this.handleError('Ошибка авторизации. Пожалуйста, войдите снова.');
-        return;
-      }
-
       try {
-        const response = await fetch('http://localhost:4000/api/users', {
+        const token = localStorage.getItem('token');
+        if (!token) {
+          throw new Error('Отсутствует токен авторизации');
+        }
+
+        // Получаем участников из GitLab
+        const gitlabResponse = await api.get(`/api/gitlab/projects/${this.$route.params.id}/members`, {
           headers: {
-            'Authorization': `Bearer ${token}`, // Добавьте "Bearer"
-            'Content-Type': 'application/json'
+            Authorization: `Bearer ${token}`
           }
         });
 
-        if (!response.ok) {
-          const errorData = await response.json().catch(() => ({}));
-          throw new Error(errorData.message || `HTTP error! status: ${response.status}`);
-        }
+        // Получаем настройки пользователей из нашей БД
+        const settingsResponse = await api.get('/api/users/settings', {
+          headers: {
+            Authorization: `Bearer ${token}`
+          }
+        });
 
-        const data = await response.json();
-        this.members = data.map(user => ({
-          id: user.id,
-          name: user.name,
-          email: user.email,
-          created_at: user.created_at,
-          role: user.role || 'Developer' // GitLab не возвращает роль, устанавливаем по умолчанию
+        // Объединяем данные
+        this.members = gitlabResponse.data.map(member => ({
+          ...member,
+          userSettings: settingsResponse.data.find(s => s.us_user_id === member.id)
         }));
-        this.retryCount = 0;
-      } catch (err) {
-        this.retryCount++;
-        if (this.retryCount <= this.maxRetries) {
-          console.warn(`Попытка ${this.retryCount} из ${this.maxRetries}...`);
-          setTimeout(this.fetchMembers, 1000 * this.retryCount);
-        } else {
-          this.handleError(`Не удалось загрузить участников: ${err.message}`);
-        }
+        
+        // Получаем ID текущего пользователя
+        const currentUserResponse = await api.get('/api/users/current', {
+          headers: {
+            Authorization: `Bearer ${token}`
+          }
+        });
+        this.currentUserId = currentUserResponse.data.id;
+      } catch (error) {
+        console.error('Ошибка при получении участников:', error);
+        this.error = 'Не удалось загрузить список участников';
+        this.toast.error(this.error);
       } finally {
         this.loading = false;
       }
     },
-    
-    handleError(message) {
-      this.error = message;
-      this.loading = false;
-      this.members = [];
+
+    getRoleName(role) {
+      const roles = {
+        admin: 'Администратор',
+        manager: 'Менеджер',
+        developer: 'Разработчик',
+        tester: 'Тестировщик'
+      };
+      return roles[role] || 'Разработчик';
     },
-    
-    refreshMembers() {
-      this.retryCount = 0;
-      this.fetchMembers();
-    },
-    
+
     formatDate(dateString) {
-      if (!dateString) return 'Дата неизвестна';
+      if (!dateString) return 'Не указана';
       const date = new Date(dateString);
       return date.toLocaleDateString('ru-RU', {
         year: 'numeric',
         month: 'long',
-        day: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit'
+        day: 'numeric'
       });
     },
-    
-    getInitials(name) {
-      if (!name) return '?';
-      return name.split(' ')
-        .map(part => part[0])
-        .join('')
-        .toUpperCase()
-        .substring(0, 2);
+
+    openEditModal(member) {
+      this.selectedMember = member;
+      this.newRole = member.userSettings?.us_role || 'developer';
+      this.showEditModal = true;
     },
 
-    getRoleLabel(role) {
-      return this.roleLabels[role] || role;
+    closeEditModal() {
+      this.showEditModal = false;
+      this.selectedMember = null;
+      this.newRole = '';
     },
 
-    getRoleClass(role) {
-      const roleMap = {
-        'Admin': 'admin',
-        'Maintainer': 'maintainer',
-        'Developer': 'developer',
-        'Guest': 'guest'
-      };
-      return roleMap[role] || 'guest';
+    async updateMemberRole() {
+      try {
+        const token = localStorage.getItem('token');
+        if (!token) {
+          throw new Error('Отсутствует токен авторизации');
+        }
+
+        // Обновляем роль в нашей БД
+        await api.put(
+          `/api/users/${this.selectedMember.id}/settings`,
+          {
+            role: this.newRole
+          },
+          {
+            headers: {
+              Authorization: `Bearer ${token}`
+            }
+          }
+        );
+
+        // Обновляем роль в локальном списке
+        const memberIndex = this.members.findIndex(m => m.id === this.selectedMember.id);
+        if (memberIndex !== -1) {
+          this.members[memberIndex].userSettings = {
+            ...this.members[memberIndex].userSettings,
+            us_role: this.newRole
+          };
+        }
+
+        this.toast.success('Роль участника успешно обновлена');
+        this.closeEditModal();
+      } catch (error) {
+        console.error('Ошибка при обновлении роли:', error);
+        this.toast.error('Не удалось обновить роль участника');
+      }
+    },
+
+    openRemoveModal(member) {
+      this.selectedMember = member;
+      this.showRemoveModal = true;
+    },
+
+    closeRemoveModal() {
+      this.showRemoveModal = false;
+      this.selectedMember = null;
+    },
+
+    async removeMember() {
+      try {
+        const token = localStorage.getItem('token');
+        if (!token) {
+          throw new Error('Отсутствует токен авторизации');
+        }
+
+        // Удаляем участника из GitLab
+        await api.delete(
+          `/api/gitlab/projects/${this.$route.params.id}/members/${this.selectedMember.id}`,
+          {
+            headers: {
+              Authorization: `Bearer ${token}`
+            }
+          }
+        );
+
+        // Удаляем настройки пользователя из нашей БД
+        await api.delete(
+          `/api/users/${this.selectedMember.id}/settings`,
+          {
+            headers: {
+              Authorization: `Bearer ${token}`
+            }
+          }
+        );
+
+        // Удаляем участника из локального списка
+        this.members = this.members.filter(m => m.id !== this.selectedMember.id);
+
+        this.toast.success('Участник успешно удален из проекта');
+        this.closeRemoveModal();
+      } catch (error) {
+        console.error('Ошибка при удалении участника:', error);
+        this.toast.error('Не удалось удалить участника из проекта');
+      }
     }
   },
-  mounted() {
+  created() {
     this.fetchMembers();
   }
 };
 </script>
 
 <style scoped>
-.members-view {
-  padding: 24px;
+.members-page {
+  padding: 2rem;
+  max-width: 1200px;
   margin: 0 auto;
 }
 
-.header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 24px;
-}
-
-h2 {
-  font-size: 24px;
+h1 {
+  font-size: 2.2rem;
   color: #2c3e50;
-  margin: 0;
+  margin-bottom: 2rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 2px solid #3498db;
 }
 
-.refresh-button {
-  padding: 8px 16px;
-  background-color: #3498db;
-  color: white;
-  border: none;
-  border-radius: 4px;
-  cursor: pointer;
-  font-size: 14px;
-  transition: background-color 0.2s;
+.search-section {
+  display: flex;
+  gap: 1rem;
+  margin-bottom: 2rem;
 }
 
-.refresh-button:hover {
-  background-color: #2980b9;
+.search-input {
+  flex: 1;
+  padding: 0.75rem;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  font-size: 1rem;
 }
 
-.refresh-button:disabled {
-  background-color: #95a5a6;
-  cursor: not-allowed;
+.role-filter {
+  padding: 0.75rem;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  font-size: 1rem;
+  min-width: 150px;
 }
 
-.members-container {
+.members-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-  gap: 16px;
+  gap: 1.5rem;
 }
 
 .member-card {
+  background: white;
+  border-radius: 10px;
+  padding: 1.5rem;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
   display: flex;
-  padding: 16px;
-  background-color: white;
-  border-radius: 8px;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
-  transition: transform 0.2s, box-shadow 0.2s;
-}
-
-.member-card:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+  flex-direction: column;
+  gap: 1rem;
 }
 
 .member-avatar {
-  width: 48px;
-  height: 48px;
+  width: 80px;
+  height: 80px;
   border-radius: 50%;
+  overflow: hidden;
+  margin: 0 auto;
+}
+
+.member-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.member-info {
+  text-align: center;
+}
+
+.member-info h3 {
+  margin: 0;
+  color: #2c3e50;
+  font-size: 1.2rem;
+}
+
+.member-username {
+  color: #666;
+  margin: 0.3rem 0;
+}
+
+.member-role {
+  display: inline-block;
+  padding: 0.3rem 0.8rem;
+  border-radius: 20px;
+  font-size: 0.9rem;
+  margin: 0.5rem 0;
+}
+
+.member-role.admin {
+  background-color: #e3f2fd;
+  color: #1565c0;
+}
+
+.member-role.manager {
+  background-color: #e8f5e9;
+  color: #2e7d32;
+}
+
+.member-role.developer {
+  background-color: #fff8e1;
+  color: #f57f17;
+}
+
+.member-role.tester {
+  background-color: #f3e5f5;
+  color: #7b1fa2;
+}
+
+.member-email {
+  color: #666;
+  font-size: 0.9rem;
+  margin: 0.3rem 0;
+}
+
+.member-joined {
+  color: #888;
+  font-size: 0.85rem;
+  margin: 0.3rem 0;
+}
+
+.member-actions {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: auto;
+}
+
+.action-btn {
+  padding: 0.5rem 1rem;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  transition: all 0.3s ease;
+  flex: 1;
+}
+
+.edit-btn {
   background-color: #3498db;
   color: white;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-weight: bold;
-  margin-right: 16px;
-  flex-shrink: 0;
 }
 
-.member-details {
-  flex-grow: 1;
+.edit-btn:hover {
+  background-color: #2980b9;
 }
 
-.member-details h3 {
-  margin: 0 0 4px 0;
-  font-size: 16px;
-  color: #2c3e50;
-}
-
-.email {
-  margin: 0 0 8px 0;
-  font-size: 14px;
-  color: #7f8c8d;
-}
-
-.meta {
-  display: flex;
-  justify-content: space-between;
-  font-size: 13px;
-}
-
-.role {
-  padding: 2px 8px;
-  border-radius: 12px;
-  font-weight: 500;
-}
-
-.role.admin {
+.remove-btn {
   background-color: #e74c3c;
   color: white;
 }
 
-.role.maintainer {
-  background-color: #e67e22;
-  color: white;
+.remove-btn:hover {
+  background-color: #c0392b;
 }
 
-.role.developer {
-  background-color: #3498db;
-  color: white;
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.5);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 1000;
 }
 
-.role.guest {
+.modal {
+  background: white;
+  padding: 2rem;
+  border-radius: 10px;
+  width: 90%;
+  max-width: 500px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+}
+
+.modal h2 {
+  margin-top: 0;
+  color: #2c3e50;
+  font-size: 1.5rem;
+  margin-bottom: 1.5rem;
+}
+
+.modal-content {
+  margin-bottom: 1.5rem;
+}
+
+.form-group {
+  margin-bottom: 1rem;
+}
+
+.form-group label {
+  display: block;
+  margin-bottom: 0.5rem;
+  color: #2c3e50;
+}
+
+.role-select {
+  width: 100%;
+  padding: 0.75rem;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  font-size: 1rem;
+}
+
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 1rem;
+}
+
+.cancel-btn {
+  padding: 0.75rem 1.5rem;
   background-color: #95a5a6;
   color: white;
-}
-
-.date {
-  color: #95a5a6;
-}
-
-.loading-state, .error-state, .empty-state {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  padding: 40px;
-  text-align: center;
-}
-
-.spinner {
-  width: 40px;
-  height: 40px;
-  border: 4px solid #f3f3f3;
-  border-top: 4px solid #3498db;
-  border-radius: 50%;
-  animation: spin 1s linear infinite;
-  margin-bottom: 16px;
-}
-
-@keyframes spin {
-  0% { transform: rotate(0deg); }
-  100% { transform: rotate(360deg); }
-}
-
-.error-icon, .empty-icon {
-  font-size: 48px;
-  margin-bottom: 16px;
-}
-
-.error-state p {
-  color: #e74c3c;
-  margin-bottom: 16px;
-}
-
-.empty-state p {
-  color: #7f8c8d;
-  margin-bottom: 16px;
-}
-
-.retry-button {
-  padding: 8px 16px;
-  background-color: #2ecc71;
-  color: white;
   border: none;
-  border-radius: 4px;
+  border-radius: 6px;
   cursor: pointer;
-  font-size: 14px;
-  transition: background-color 0.2s;
+  font-size: 1rem;
+  transition: all 0.3s ease;
 }
 
-.retry-button:hover {
-  background-color: #27ae60;
+.cancel-btn:hover {
+  background-color: #7f8c8d;
+}
+
+.loading, .error {
+  text-align: center;
+  padding: 2rem;
+  font-size: 1.2rem;
+  border-radius: 8px;
+  margin: 2rem 0;
+}
+
+.loading {
+  background-color: #f8f9fa;
+  color: #7f8c8d;
+}
+
+.error {
+  background-color: #fdecea;
+  color: #e74c3c;
+}
+
+@media (max-width: 768px) {
+  .members-page {
+    padding: 1rem;
+  }
+
+  .search-section {
+    flex-direction: column;
+  }
+
+  .members-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .member-card {
+    padding: 1rem;
+  }
+
+  .modal {
+    width: 95%;
+    padding: 1.5rem;
+  }
 }
 </style>

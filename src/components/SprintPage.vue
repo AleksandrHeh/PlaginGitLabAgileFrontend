@@ -5,6 +5,7 @@
       <div class="sprint-dates">
         <p><strong>Дата начала:</strong> {{ formatDate(sprint.spt_start_date) }}</p>
         <p><strong>Дата окончания:</strong> {{ formatDate(sprint.spt_end_date) }}</p>
+        <p><strong>Осталось задач:</strong> {{ remainingTasks }}</p>
       </div>
       <button 
         @click="completeSprint" 
@@ -221,6 +222,8 @@
 // eslint-disable-next-line no-unused-vars
 import Chart from 'chart.js/auto';
 import axios from 'axios';
+import jsPDF from 'jspdf';
+import html2canvas from 'html2canvas';
 
 const api = axios.create({
   baseURL: 'http://localhost:4000',
@@ -275,7 +278,8 @@ export default {
         unfinishedTasks: 0,
         teamStats: [],
         unfinishedTasksList: []
-      }
+      },
+      remainingTasks: 0
     };
   },
   methods: {
@@ -566,9 +570,9 @@ export default {
           this.showSprintReportModal = true;
           
           // Обновляем статус спринта локально
-          this.sprint.is_completed = true;
-          this.sprint.end_date = new Date().toISOString().split('T')[0];
-          
+        this.sprint.is_completed = true;
+        this.sprint.end_date = new Date().toISOString().split('T')[0];
+        
         } catch (error) {
           console.error('Ошибка при завершении спринта:', error);
           alert('Не удалось завершить спринт');
@@ -613,46 +617,161 @@ export default {
       this.showSprintReportModal = false;
     },
 
-    downloadReport() {
-      const reportData = {
-        sprintTitle: this.sprint.spt_title,
-        startDate: this.formatDate(this.sprint.spt_start_date),
-        endDate: this.formatDate(this.sprint.spt_end_date),
-        ...this.sprintReport
-      };
+    async downloadReport() {
+      try {
+        // Создаем временный элемент для отчета
+        const reportElement = document.createElement('div');
+        reportElement.className = 'pdf-report';
+        reportElement.innerHTML = `
+          <div style="padding: 20px; font-family: Arial, sans-serif;">
+            <h1 style="text-align: center; color: #2c3e50; margin-bottom: 30px;">Отчет по спринту "${this.sprint.spt_title}"</h1>
+            
+            <div style="margin-bottom: 20px;">
+              <p><strong>Дата начала:</strong> ${this.formatDate(this.sprint.spt_start_date)}</p>
+              <p><strong>Дата окончания:</strong> ${this.formatDate(this.sprint.spt_end_date)}</p>
+            </div>
 
-      const reportContent = `
-Отчет по спринту "${reportData.sprintTitle}"
-Дата начала: ${reportData.startDate}
-Дата окончания: ${reportData.endDate}
+            <div style="margin-bottom: 20px;">
+              <h2 style="color: #34495e; border-bottom: 2px solid #eee; padding-bottom: 10px;">Общая статистика</h2>
+              <p>Всего задач: ${this.sprintReport.totalTasks}</p>
+              <p>Выполнено задач: ${this.sprintReport.completedTasks}</p>
+              <p>Процент выполнения: ${this.sprintReport.completionPercentage}%</p>
+              <p>Задачи в работе: ${this.sprintReport.inProgressTasks}</p>
+              <p>Задачи на проверке: ${this.sprintReport.inReviewTasks}</p>
+              <p>Незавершенные задачи: ${this.sprintReport.unfinishedTasks}</p>
+            </div>
 
-Общая статистика:
-- Всего задач: ${reportData.totalTasks}
-- Выполнено задач: ${reportData.completedTasks}
-- Процент выполнения: ${reportData.completionPercentage}%
-- Задачи в работе: ${reportData.inProgressTasks}
-- Задачи на проверке: ${reportData.inReviewTasks}
-- Незавершенные задачи: ${reportData.unfinishedTasks}
+            <div style="margin-bottom: 20px;">
+              <h2 style="color: #34495e; border-bottom: 2px solid #eee; padding-bottom: 10px;">Статистика по участникам</h2>
+              ${this.sprintReport.teamStats.map(member => `
+                <div style="margin-bottom: 10px;">
+                  <p style="font-weight: bold;">${member.name}:</p>
+                  <p>Выполнено задач: ${member.completedTasks}</p>
+                  <p>Задач в работе: ${member.inProgressTasks}</p>
+                </div>
+              `).join('')}
+            </div>
 
-Статистика по участникам:
-${reportData.teamStats.map(member => `
-${member.name}:
-- Выполнено задач: ${member.completedTasks}
-- Задач в работе: ${member.inProgressTasks}`).join('\n')}
+            <div style="margin-bottom: 20px;">
+              <h2 style="color: #34495e; border-bottom: 2px solid #eee; padding-bottom: 10px;">Незавершенные задачи</h2>
+              ${this.sprintReport.unfinishedTasksList.map(task => `
+                <div style="margin-bottom: 5px;">
+                  <p>#${task.id} - ${task.title} (${task.status})</p>
+                </div>
+              `).join('')}
+            </div>
+          </div>
+        `;
 
-Незавершенные задачи:
-${reportData.unfinishedTasksList.map(task => `#${task.id} - ${task.title} (${task.status})`).join('\n')}
-      `;
+        // Добавляем элемент на страницу
+        document.body.appendChild(reportElement);
 
-      const blob = new Blob([reportContent], { type: 'text/plain;charset=utf-8' });
-      const url = window.URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = `sprint-report-${this.sprint.spt_title}-${new Date().toISOString().split('T')[0]}.txt`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      window.URL.revokeObjectURL(url);
+        // Конвертируем элемент в canvas
+        const canvas = await html2canvas(reportElement, {
+          scale: 2,
+          useCORS: true,
+          logging: false
+        });
+
+        // Создаем PDF
+        const pdf = new jsPDF('p', 'mm', 'a4');
+        const imgWidth = 210; // A4 ширина в мм
+        const imgHeight = (canvas.height * imgWidth) / canvas.width;
+        
+        pdf.addImage(canvas.toDataURL('image/png'), 'PNG', 0, 0, imgWidth, imgHeight);
+
+        // Сохраняем PDF
+        pdf.save(`sprint-report-${this.sprint.spt_title}-${new Date().toISOString().split('T')[0]}.pdf`);
+
+        // Удаляем временный элемент
+        document.body.removeChild(reportElement);
+      } catch (error) {
+        console.error('Ошибка при создании PDF:', error);
+        alert('Не удалось создать PDF отчет');
+      }
+    },
+
+    initChart() {
+      try {
+        const canvas = this.$refs.burnDownChart;
+        if (!canvas) {
+        console.error('Canvas элемент не найден');
+        return;
+      }
+
+        // Уничтожаем предыдущий график, если он существует
+        if (this.chart) {
+          this.chart.destroy();
+          this.chart = null;
+        }
+
+        // Создаем новый график
+        const ctx = canvas.getContext('2d');
+      if (!ctx) {
+        console.error('Не удалось получить контекст canvas');
+        return;
+      }
+
+        // Проверяем наличие данных
+        if (!this.burnDownData.dates || !this.burnDownData.ideal || !this.burnDownData.actual) {
+          console.error('Отсутствуют данные для графика');
+        return;
+      }
+
+        this.chart = new Chart(ctx, {
+          type: 'line',
+          data: {
+            labels: this.burnDownData.dates,
+            datasets: [
+              {
+                label: 'Идеальная линия',
+                data: this.burnDownData.ideal,
+                borderColor: 'rgba(75, 192, 192, 1)',
+                borderDash: [5, 5],
+                fill: false,
+                tension: 0.1
+              },
+              {
+                label: 'Фактическая линия',
+                data: this.burnDownData.actual,
+                borderColor: 'rgba(255, 99, 132, 1)',
+                fill: false,
+                tension: 0.1
+              }
+            ]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            animation: {
+              duration: 0 // Отключаем анимацию для предотвращения проблем с рендерингом
+            },
+            scales: {
+              y: {
+                beginAtZero: true,
+                title: {
+                  display: true,
+                  text: 'Оставшиеся задачи'
+                }
+              },
+              x: {
+                title: {
+                  display: true,
+                  text: 'Дни спринта'
+                }
+              }
+            },
+            plugins: {
+              title: {
+                display: true,
+                text: 'График сгорания задач'
+              }
+            }
+          }
+        });
+      } catch (error) {
+        console.error('Ошибка при инициализации графика:', error);
+      }
     },
 
     prepareBurnDownData() {
@@ -677,125 +796,53 @@ ${reportData.unfinishedTasksList.map(task => `#${task.id} - ${task.title} (${tas
         return;
       }
 
+      // Инициализируем массивы данных
       this.burnDownData = {
-        ideal: [],
-        actual: [],
-        dates: []
+        ideal: new Array(totalDays).fill(0),
+        actual: new Array(totalDays).fill(null),
+        dates: new Array(totalDays).fill('')
       };
       
+      // Заполняем данные для идеальной линии
       for (let i = 0; i < totalDays; i++) {
-        this.burnDownData.ideal.push(totalTasks - (i * (totalTasks / (totalDays - 1))));
+        this.burnDownData.ideal[i] = totalTasks - (i * (totalTasks / (totalDays - 1)));
+        
+        const date = new Date(startDate);
+        date.setDate(date.getDate() + i);
+        this.burnDownData.dates[i] = this.formatChartDate(date);
       }
       
+      // Рассчитываем фактическую линию
       const doneTasks = this.tasks.filter(task => task.status === 'Готово').length;
       const currentDay = Math.min(
         Math.ceil((new Date() - startDate) / (1000 * 60 * 60 * 24)) + 1,
         totalDays
       );
-      
+
+      // Заполняем фактическую линию
+      this.remainingTasks = totalTasks; // Инициализируем оставшиеся задачи
       for (let i = 0; i < totalDays; i++) {
         if (i < currentDay) {
-          this.burnDownData.actual.push(totalTasks - (doneTasks * (i / currentDay)));
+          // Рассчитываем прогресс на текущий день
+          const progress = (doneTasks / currentDay) * i;
+          this.burnDownData.actual[i] = Math.max(0, totalTasks - progress);
+          if (i === currentDay - 1) {
+            this.remainingTasks = Math.max(0, totalTasks - progress); // Обновляем количество оставшихся задач
+          }
         } else {
-          this.burnDownData.actual.push(null);
+          // Для будущих дней оставляем null
+          this.burnDownData.actual[i] = null;
         }
       }
-      
-      for (let i = 0; i < totalDays; i++) {
-        const date = new Date(startDate);
-        date.setDate(date.getDate() + i);
-        this.burnDownData.dates.push(this.formatChartDate(date));
-      }
+
+      // После подготовки данных инициализируем график
+      this.$nextTick(() => {
+        this.initChart();
+      });
     },
 
     formatChartDate(date) {
       return date.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' });
-    },
-
-    renderBurnDownChart() {
-      if (!this.$refs.burnDownChart) {
-        console.error('Canvas элемент не найден');
-        return;
-      }
-
-      const ctx = this.$refs.burnDownChart.getContext('2d');
-      if (!ctx) {
-        console.error('Не удалось получить контекст canvas');
-        return;
-      }
-
-      if (!this.burnDownData.dates.length || !this.burnDownData.ideal.length) {
-        console.error('Нет данных для отображения графика');
-        return;
-      }
-
-      if (this.chart) {
-        this.chart.destroy();
-        this.chart = null;
-      }
-
-      try {
-        this.chart = new Chart(ctx, {
-          type: 'line',
-          data: {
-            labels: this.burnDownData.dates,
-            datasets: [
-              {
-                label: 'Идеальное сгорание',
-                data: this.burnDownData.ideal,
-                borderColor: '#3498db',
-                backgroundColor: 'transparent',
-                borderWidth: 2,
-                borderDash: [5, 5],
-                tension: 0.1,
-                fill: false
-              },
-              {
-                label: 'Фактическое сгорание',
-                data: this.burnDownData.actual,
-                borderColor: '#2ecc71',
-                backgroundColor: 'transparent',
-                borderWidth: 3,
-                tension: 0.1,
-                fill: false
-              }
-            ]
-          },
-          options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            animation: {
-              duration: 0
-            },
-            plugins: {
-              legend: {
-                position: 'top',
-              },
-              tooltip: {
-                mode: 'index',
-                intersect: false,
-              }
-            },
-            scales: {
-              y: {
-                beginAtZero: true,
-                title: {
-                  display: true,
-                  text: 'Осталось задач'
-                }
-              },
-              x: {
-                title: {
-                  display: true,
-                  text: 'Дни спринта'
-                }
-              }
-            }
-          }
-        });
-      } catch (error) {
-        console.error('Ошибка при создании графика:', error);
-      }
     },
 
     checkSprintCompletion() {
@@ -867,10 +914,15 @@ ${reportData.unfinishedTasksList.map(task => `#${task.id} - ${task.title} (${tas
       await this.fetchSprint();
       await this.fetchProjectMembers();
       this.prepareBurnDownData();
+      
+      // Ждем следующего тика Vue для обновления DOM
       await this.$nextTick();
-      setTimeout(() => {
-        this.renderBurnDownChart();
-      }, 100);
+      
+      // Инициализируем график после полной загрузки страницы
+      window.addEventListener('load', () => {
+        this.initChart();
+      });
+      
       this.checkSprintCompletion();
     } catch (error) {
       console.error('Ошибка при загрузке страницы:', error);
@@ -889,7 +941,7 @@ ${reportData.unfinishedTasksList.map(task => `#${task.id} - ${task.title} (${tas
       handler() {
         this.prepareBurnDownData();
         this.$nextTick(() => {
-          this.renderBurnDownChart();
+          this.initChart();
         });
         this.checkSprintCompletion();
       }

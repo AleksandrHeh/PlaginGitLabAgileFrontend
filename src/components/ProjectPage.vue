@@ -18,15 +18,25 @@
       <!-- Секция спринтов -->
       <div class="sprints-section">
         <h2>Спринты проекта</h2>
-        <ul v-if="sprints.length > 0" class="sprints-list">
+        <ul v-if="sprints && sprints.length > 0" class="sprints-list">
           <li v-for="sprint in sprints" :key="sprint.spt_id" class="sprint-item">
             <div class="sprint-content">
               <p><strong>Название:</strong> {{ sprint.spt_title }}</p>
               <p><strong>Дата начала:</strong> {{ formatDate(sprint.spt_start_date) }}</p>
               <p><strong>Дата окончания:</strong> {{ formatDate(sprint.spt_end_date) }}</p>
               <p><strong>Цели:</strong> {{ sprint.spt_goals || "Нет целей" }}</p>
+              <p><strong>Статус:</strong> {{ sprint.is_completed ? 'Завершен' : 'Активен' }}</p>
             </div>
-            <button @click="goToSprint(sprint.spt_id)" class="action-btn">Открыть спринт</button>
+            <div class="sprint-actions">
+              <button @click="goToSprint(sprint.spt_id)" class="action-btn">Открыть спринт</button>
+              <button 
+                v-if="sprint.is_completed" 
+                @click="viewSprintReport(sprint)" 
+                class="action-btn report-btn"
+              >
+                Просмотреть отчет
+              </button>
+            </div>
           </li>
         </ul>
         <div v-else class="no-sprints">
@@ -37,43 +47,19 @@
       <!-- Список задач -->
       <div class="tasks-section">
         <h2>Задачи проекта</h2>
-        
-        <!-- Активные задачи -->
-        <div v-if="activeTasks.length > 0">
-          <h3>Активные задачи</h3>
-          <ul class="tasks-list">
-            <li v-for="task in activeTasks" :key="task.id" class="task-item">
-              <div class="task-content">
-                <p><strong>Задача:</strong> {{ task.title }}</p>
-                <p><strong>Описание:</strong> {{ task.description || "Нет описания" }}</p>
-                <p><strong>Статус:</strong> {{ task.state }}</p>
-                <p><strong>Автор:</strong> {{ task.author?.name || "Неизвестно" }}</p>
-                <p><strong>Дата создания:</strong> {{ formatDate(task.created_at) }}</p>
-              </div>
-              <span class="delete-icon" @click.stop="openDeleteModal(task)">&#128465;</span>
-            </li>
-          </ul>
-        </div>
-
-        <!-- Закрытые задачи -->
-        <div v-if="closedTasks.length > 0" class="closed-tasks">
-          <h3>Закрытые задачи</h3>
-          <ul class="tasks-list">
-            <li v-for="task in closedTasks" :key="task.id" class="task-item closed">
-              <div class="task-content">
-                <p><strong>Задача:</strong> {{ task.title }}</p>
-                <p><strong>Описание:</strong> {{ task.description || "Нет описания" }}</p>
-                <p><strong>Статус:</strong> {{ task.state }}</p>
-                <p><strong>Автор:</strong> {{ task.author?.name || "Неизвестно" }}</p>
-                <p><strong>Дата создания:</strong> {{ formatDate(task.created_at) }}</p>
-                <p><strong>Дата закрытия:</strong> {{ formatDate(task.closed_at) }}</p>
-              </div>
-              <span class="delete-icon" @click.stop="openDeleteModal(task)">&#128465;</span>
-            </li>
-          </ul>
-        </div>
-
-        <div v-if="!activeTasks.length && !closedTasks.length" class="no-tasks">
+        <ul v-if="tasks && tasks.length > 0" class="tasks-list">
+          <li v-for="task in tasks" :key="task.id" class="task-item">
+            <div class="task-content">
+              <p><strong>Задача:</strong> {{ task.title }}</p>
+              <p><strong>Описание:</strong> {{ task.description || "Нет описания" }}</p>
+              <p><strong>Статус:</strong> {{ task.state }}</p>
+              <p><strong>Автор:</strong> {{ task.author?.name || "Неизвестно" }}</p>
+              <p><strong>Дата создания:</strong> {{ formatDate(task.created_at) }}</p>
+            </div>
+            <span class="delete-icon" @click.stop="openDeleteModal(task)">&#128465;</span>
+          </li>
+        </ul>
+        <div v-else class="no-tasks">
           Нет доступных задач.
         </div>
       </div>
@@ -160,6 +146,88 @@
         </div>
       </div>
     </div>
+
+    <!-- Модальное окно для просмотра отчета по спринту -->
+    <div v-if="showReportModal" class="modal-overlay" @click.self="closeReportModal">
+      <div class="modal sprint-report-modal">
+        <h2>Отчет по спринту "{{ selectedSprint?.spt_title }}"</h2>
+        
+        <div class="report-content">
+          <div class="report-section">
+            <h3>Общая информация</h3>
+            <div class="report-grid">
+              <div class="report-item">
+                <span class="label">Дата начала:</span>
+                <span class="value">{{ formatDate(selectedSprint?.spt_start_date) }}</span>
+              </div>
+              <div class="report-item">
+                <span class="label">Дата окончания:</span>
+                <span class="value">{{ formatDate(selectedSprint?.spt_end_date) }}</span>
+              </div>
+              <div class="report-item">
+                <span class="label">Всего задач:</span>
+                <span class="value">{{ sprintReport.totalTasks }}</span>
+              </div>
+              <div class="report-item">
+                <span class="label">Выполнено задач:</span>
+                <span class="value">{{ sprintReport.completedTasks }}</span>
+              </div>
+              <div class="report-item">
+                <span class="label">Процент выполнения:</span>
+                <span class="value">{{ sprintReport.completionPercentage }}%</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="report-section">
+            <h3>Статистика по задачам</h3>
+            <div class="report-grid">
+              <div class="report-item">
+                <span class="label">Задачи в работе:</span>
+                <span class="value">{{ sprintReport.inProgressTasks }}</span>
+              </div>
+              <div class="report-item">
+                <span class="label">Задачи на проверке:</span>
+                <span class="value">{{ sprintReport.inReviewTasks }}</span>
+              </div>
+              <div class="report-item">
+                <span class="label">Незавершенные задачи:</span>
+                <span class="value">{{ sprintReport.unfinishedTasks }}</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="report-section">
+            <h3>Участники спринта</h3>
+            <div class="team-stats">
+              <div v-for="member in sprintReport.teamStats" :key="member.id" class="member-stat">
+                <span class="member-name">{{ member.name }}</span>
+                <div class="member-tasks">
+                  <span class="task-count">Выполнено: {{ member.completedTasks }}</span>
+                  <span class="task-count">В работе: {{ member.inProgressTasks }}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="report-section">
+            <h3>Незавершенные задачи</h3>
+            <ul class="unfinished-tasks-list">
+              <li v-for="task in sprintReport.unfinishedTasksList" :key="task.id" class="unfinished-task">
+                <span class="task-id">#{{ task.id }}</span>
+                <span class="task-title">{{ task.title }}</span>
+                <span class="task-status" :class="task.status.toLowerCase()">{{ task.status }}</span>
+              </li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="modal-actions">
+          <button @click="downloadSprintReport" class="action-btn">Скачать отчет</button>
+          <button @click="closeReportModal" class="cancel-btn">Закрыть</button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -167,6 +235,8 @@
 import { useToast } from 'vue-toastification';
 import 'vue-toastification/dist/index.css';
 import axios from 'axios';
+import jsPDF from 'jspdf';
+import html2canvas from 'html2canvas';
 
 // Создаем экземпляр axios с базовым URL
 const api = axios.create({
@@ -190,6 +260,7 @@ export default {
       showDeleteModal: false,
       showSprintModal: false,
       showDeleteSprintModal: false,
+      showReportModal: false,
       selectedTask: null,
       selectedSprint: null,
       newTask: {
@@ -202,6 +273,16 @@ export default {
         start_date: '',
         end_date: '',
         goals: '',
+      },
+      sprintReport: {
+        totalTasks: 0,
+        completedTasks: 0,
+        completionPercentage: 0,
+        inProgressTasks: 0,
+        inReviewTasks: 0,
+        unfinishedTasks: 0,
+        teamStats: [],
+        unfinishedTasksList: []
       },
     };
   },
@@ -242,11 +323,16 @@ export default {
             Authorization: `Bearer ${token}`
           }
         });
-        console.log('Полученные спринты:', response.data);
-        this.sprints = response.data;
+        
+        // Добавляем проверку завершения спринта
+        this.sprints = response.data.map(sprint => ({
+          ...sprint,
+          is_completed: new Date(sprint.spt_end_date) < new Date() || sprint.is_completed
+        }));
       } catch (error) {
         console.error('Ошибка при получении спринтов:', error);
         this.toast.error('Не удалось загрузить спринты');
+        this.sprints = [];
       }
     },
     async fetchTasks() {
@@ -402,6 +488,11 @@ export default {
           }
         });
         
+        // Инициализируем массив sprints, если он null
+        if (!this.sprints) {
+          this.sprints = [];
+        }
+        
         this.sprints.push(response.data);
         this.showSprintModal = false;
         this.newSprint = {
@@ -432,14 +523,152 @@ export default {
     goToSprint(sprintId) {
       this.$router.push(`/projects/${this.$route.params.id}/sprint/${sprintId}`);
     },
-  },
-  computed: {
-    activeTasks() {
-      return this.tasks.filter(task => task.state !== 'closed');
+    async viewSprintReport(sprint) {
+      try {
+        const token = localStorage.getItem('token');
+        if (!token) {
+          throw new Error('Отсутствует токен авторизации');
+        }
+
+        // Получаем задачи спринта
+        const response = await api.get(`/api/projects/${this.$route.params.id}/sprints/${sprint.spt_id}/issues`, {
+          headers: {
+            Authorization: `Bearer ${token}`
+          }
+        });
+
+        const tasks = response.data;
+        const completedTasks = tasks.filter(task => task.status === 'Готово');
+        const inProgressTasks = tasks.filter(task => task.status === 'В работе');
+        const inReviewTasks = tasks.filter(task => task.status === 'На проверке');
+        const unfinishedTasks = tasks.filter(task => task.status !== 'Готово');
+
+        // Получаем участников проекта
+        const membersResponse = await api.get(`/api/users`, {
+          headers: {
+            Authorization: `Bearer ${token}`
+          }
+        });
+
+        const teamStats = membersResponse.data.map(member => {
+          const memberTasks = tasks.filter(task => task.assigned_to === member.id);
+          return {
+            id: member.id,
+            name: member.name,
+            completedTasks: memberTasks.filter(task => task.status === 'Готово').length,
+            inProgressTasks: memberTasks.filter(task => task.status === 'В работе').length
+          };
+        });
+
+        this.sprintReport = {
+          totalTasks: tasks.length,
+          completedTasks: completedTasks.length,
+          completionPercentage: Math.round((completedTasks.length / tasks.length) * 100) || 0,
+          inProgressTasks: inProgressTasks.length,
+          inReviewTasks: inReviewTasks.length,
+          unfinishedTasks: unfinishedTasks.length,
+          teamStats: teamStats,
+          unfinishedTasksList: unfinishedTasks.map(task => ({
+            id: task.id,
+            title: task.title,
+            status: task.status
+          }))
+        };
+
+        this.selectedSprint = sprint;
+        this.showReportModal = true;
+      } catch (error) {
+        console.error('Ошибка при получении отчета:', error);
+        this.toast.error('Не удалось загрузить отчет по спринту');
+      }
     },
-    closedTasks() {
-      return this.tasks.filter(task => task.state === 'closed');
-    }
+    closeReportModal() {
+      this.showReportModal = false;
+      this.selectedSprint = null;
+      this.sprintReport = {
+        totalTasks: 0,
+        completedTasks: 0,
+        completionPercentage: 0,
+        inProgressTasks: 0,
+        inReviewTasks: 0,
+        unfinishedTasks: 0,
+        teamStats: [],
+        unfinishedTasksList: []
+      };
+    },
+    async downloadSprintReport() {
+      try {
+        // Создаем временный элемент для отчета
+        const reportElement = document.createElement('div');
+        reportElement.className = 'pdf-report';
+        reportElement.innerHTML = `
+          <div style="padding: 20px; font-family: Arial, sans-serif;">
+            <h1 style="text-align: center; color: #2c3e50; margin-bottom: 30px;">Отчет по спринту "${this.selectedSprint.spt_title}"</h1>
+            
+            <div style="margin-bottom: 20px;">
+              <p><strong>Дата начала:</strong> ${this.formatDate(this.selectedSprint.spt_start_date)}</p>
+              <p><strong>Дата окончания:</strong> ${this.formatDate(this.selectedSprint.spt_end_date)}</p>
+            </div>
+
+            <div style="margin-bottom: 20px;">
+              <h2 style="color: #34495e; border-bottom: 2px solid #eee; padding-bottom: 10px;">Общая статистика</h2>
+              <p>Всего задач: ${this.sprintReport.totalTasks}</p>
+              <p>Выполнено задач: ${this.sprintReport.completedTasks}</p>
+              <p>Процент выполнения: ${this.sprintReport.completionPercentage}%</p>
+              <p>Задачи в работе: ${this.sprintReport.inProgressTasks}</p>
+              <p>Задачи на проверке: ${this.sprintReport.inReviewTasks}</p>
+              <p>Незавершенные задачи: ${this.sprintReport.unfinishedTasks}</p>
+            </div>
+
+            <div style="margin-bottom: 20px;">
+              <h2 style="color: #34495e; border-bottom: 2px solid #eee; padding-bottom: 10px;">Статистика по участникам</h2>
+              ${this.sprintReport.teamStats.map(member => `
+                <div style="margin-bottom: 10px;">
+                  <p style="font-weight: bold;">${member.name}:</p>
+                  <p>Выполнено задач: ${member.completedTasks}</p>
+                  <p>Задач в работе: ${member.inProgressTasks}</p>
+                </div>
+              `).join('')}
+            </div>
+
+            <div style="margin-bottom: 20px;">
+              <h2 style="color: #34495e; border-bottom: 2px solid #eee; padding-bottom: 10px;">Незавершенные задачи</h2>
+              ${this.sprintReport.unfinishedTasksList.map(task => `
+                <div style="margin-bottom: 5px;">
+                  <p>#${task.id} - ${task.title} (${task.status})</p>
+                </div>
+              `).join('')}
+            </div>
+          </div>
+        `;
+
+        // Добавляем элемент на страницу
+        document.body.appendChild(reportElement);
+
+        // Конвертируем элемент в canvas
+        const canvas = await html2canvas(reportElement, {
+          scale: 2,
+          useCORS: true,
+          logging: false
+        });
+
+        // Создаем PDF
+        const pdf = new jsPDF('p', 'mm', 'a4');
+        const imgWidth = 210; // A4 ширина в мм
+        const imgHeight = (canvas.height * imgWidth) / canvas.width;
+        
+        pdf.addImage(canvas.toDataURL('image/png'), 'PNG', 0, 0, imgWidth, imgHeight);
+
+        // Сохраняем PDF
+        pdf.save(`sprint-report-${this.selectedSprint.spt_title}-${new Date().toISOString().split('T')[0]}.pdf`);
+
+        // Удаляем временный элемент
+        document.body.removeChild(reportElement);
+      } catch (error) {
+        console.error('Ошибка при создании PDF:', error);
+        this.toast.error('Не удалось создать PDF отчет');
+      }
+    },
   },
   created() {
     this.fetchProject();
@@ -647,6 +876,7 @@ h2::before {
   align-items: center;
   z-index: 1000;
   backdrop-filter: blur(3px);
+  overflow: hidden;
 }
 
 .modal {
@@ -657,6 +887,9 @@ h2::before {
   max-width: 500px;
   box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
   animation: modalFadeIn 0.3s ease-out;
+  display: flex;
+  flex-direction: column;
+  max-height: 90vh;
 }
 
 @keyframes modalFadeIn {
@@ -720,7 +953,9 @@ h2::before {
   display: flex;
   justify-content: flex-end;
   gap: 1rem;
-  margin-top: 1.5rem;
+  margin-top: auto;
+  padding-top: 1rem;
+  border-top: 1px solid #eee;
 }
 
 .cancel-btn {
@@ -773,40 +1008,200 @@ h2::before {
   }
 }
 
-.closed-tasks {
-  margin-top: 2rem;
-  padding-top: 2rem;
-  border-top: 1px solid #eee;
+.sprint-actions {
+  display: flex;
+  gap: 1rem;
+  align-items: center;
 }
 
-.closed-tasks h3 {
-  color: #7f8c8d;
-  font-size: 1.4rem;
-  margin-bottom: 1rem;
+.report-btn {
+  background-color: #2ecc71;
 }
 
-.task-item.closed {
+.report-btn:hover {
+  background-color: #27ae60;
+}
+
+.sprint-report-modal {
+  max-width: 800px;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.report-content {
+  margin: 1.5rem 0;
+  overflow-y: auto;
+  flex: 1;
+  padding-right: 10px;
+}
+
+.report-section {
+  margin-bottom: 2rem;
+  padding: 1rem;
   background-color: #f8f9fa;
-  border-left-color: #95a5a6;
-  opacity: 0.8;
+  border-radius: 8px;
 }
 
-.task-item.closed .task-content {
-  color: #7f8c8d;
-}
-
-.task-item.closed .task-content strong {
-  color: #95a5a6;
-}
-
-.task-item.closed:hover {
-  opacity: 1;
-}
-
-h3 {
-  font-size: 1.4rem;
+.report-section h3 {
   color: #2c3e50;
-  margin: 1.5rem 0 1rem;
-  font-weight: 500;
+  margin: 0 0 1rem 0;
+  font-size: 1.2rem;
+  border-bottom: 2px solid #eee;
+  padding-bottom: 0.5rem;
+}
+
+.report-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 1rem;
+}
+
+.report-item {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.report-item .label {
+  font-size: 0.9rem;
+  color: #666;
+}
+
+.report-item .value {
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: #2c3e50;
+}
+
+.team-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 1rem;
+}
+
+.member-stat {
+  background-color: white;
+  padding: 1rem;
+  border-radius: 6px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.member-name {
+  font-weight: 600;
+  color: #2c3e50;
+  display: block;
+  margin-bottom: 0.5rem;
+}
+
+.member-tasks {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.task-count {
+  font-size: 0.9rem;
+  color: #666;
+}
+
+.unfinished-tasks-list {
+  list-style: none;
+  padding: 0;
+  display: grid;
+  gap: 0.8rem;
+}
+
+.unfinished-task {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  background-color: white;
+  padding: 0.8rem;
+  border-radius: 6px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.task-id {
+  color: #666;
+  font-size: 0.9rem;
+  font-weight: 600;
+  background-color: #f0f0f0;
+  padding: 0.2rem 0.5rem;
+  border-radius: 4px;
+}
+
+.task-title {
+  flex: 1;
+}
+
+.task-status {
+  font-size: 0.85rem;
+  padding: 0.2rem 0.5rem;
+  border-radius: 4px;
+  background-color: #f0f0f0;
+}
+
+.task-status.в\ работе {
+  background-color: #fff8e1;
+  color: #f57f17;
+}
+
+.task-status.на\ проверке {
+  background-color: #e3f2fd;
+  color: #1565c0;
+}
+
+.task-status.к\ выполнению {
+  background-color: #f5f5f5;
+  color: #616161;
+}
+
+@media (max-width: 768px) {
+  .sprint-actions {
+    flex-direction: column;
+    width: 100%;
+  }
+  
+  .sprint-actions button {
+    width: 100%;
+  }
+  
+  .report-grid {
+    grid-template-columns: 1fr;
+  }
+  
+  .team-stats {
+    grid-template-columns: 1fr;
+  }
+  
+  .unfinished-task {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.5rem;
+  }
+  
+  .task-status {
+    align-self: flex-start;
+  }
+}
+
+/* Добавляем стили для скроллбара */
+.report-content::-webkit-scrollbar {
+  width: 8px;
+}
+
+.report-content::-webkit-scrollbar-track {
+  background: #f1f1f1;
+  border-radius: 4px;
+}
+
+.report-content::-webkit-scrollbar-thumb {
+  background: #888;
+  border-radius: 4px;
+}
+
+.report-content::-webkit-scrollbar-thumb:hover {
+  background: #555;
 }
 </style>
