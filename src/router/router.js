@@ -38,6 +38,12 @@ const routes = [
     component: () => import('@/components/TaskPage.vue'),
     meta: { requiresAuth: true }
   },
+  {
+    path: '/members',
+    name: 'MembersPage',
+    component: () => import('@/views/MembersPage.vue'),
+    meta: { requiresAuth: true }
+  },
 ];
 
 const router = createRouter({

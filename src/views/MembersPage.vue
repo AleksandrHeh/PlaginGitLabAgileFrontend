@@ -1,117 +1,107 @@
 <template>
   <div class="members-page">
-    <h1>Участники проекта</h1>
-    
-    <div v-if="loading" class="loading">
-      Загрузка участников...
+    <div class="page-header">
+      <h1>Участники команды</h1>
+      <div class="header-actions">
+        <button class="refresh-button" @click="refreshMembers" :disabled="loading">
+          <span class="refresh-icon">↻</span>
+          Обновить
+        </button>
+      </div>
     </div>
     
-    <div v-else-if="error" class="error">
-      {{ error }}
+    <div v-if="loading" class="loading-container">
+      <div class="loading-spinner"></div>
+      <p>Загрузка участников команды...</p>
     </div>
     
-    <div v-else>
-      <!-- Поиск и фильтрация -->
-      <div class="search-section">
-        <input 
-          type="text" 
-          v-model="searchQuery" 
-          placeholder="Поиск участников..." 
-          class="search-input"
-        />
-        <select v-model="roleFilter" class="role-filter">
-          <option value="">Все роли</option>
-          <option value="admin">Администратор</option>
-          <option value="manager">Менеджер</option>
-          <option value="developer">Разработчик</option>
-          <option value="tester">Тестировщик</option>
-        </select>
-      </div>
-
-      <!-- Список участников -->
-      <div class="members-grid">
-        <div v-for="member in filteredMembers" :key="member.id" class="member-card">
-          <div class="member-avatar">
-            <img :src="member.avatar_url || '/default-avatar.png'" :alt="member.name">
-          </div>
-          <div class="member-info">
-            <h3>{{ member.name }}</h3>
-            <p class="member-username">@{{ member.username }}</p>
-            <p class="member-role" :class="member.userSettings?.us_role || 'developer'">
-              {{ getRoleName(member.userSettings?.us_role) }}
-            </p>
-            <p class="member-email">{{ member.email }}</p>
-            <p class="member-joined">
-              Участник с {{ formatDate(member.created_at) }}
-            </p>
-          </div>
-          <div class="member-actions">
-            <button 
-              v-if="canManageMembers" 
-              @click="openEditModal(member)"
-              class="action-btn edit-btn"
-            >
-              Изменить роль
-            </button>
-            <button 
-              v-if="canManageMembers && member.id !== currentUserId" 
-              @click="openRemoveModal(member)"
-              class="action-btn remove-btn"
-            >
-              Удалить
-            </button>
-          </div>
-        </div>
-      </div>
-
-      <!-- Модальное окно изменения роли -->
-      <div v-if="showEditModal" class="modal-overlay" @click.self="closeEditModal">
-        <div class="modal">
-          <h2>Изменение роли участника</h2>
-          <div class="modal-content">
-            <p><strong>Участник:</strong> {{ selectedMember?.name }}</p>
-            <div class="form-group">
-              <label for="newRole">Новая роль:</label>
-              <select id="newRole" v-model="newRole" class="role-select">
-                <option value="admin">Администратор</option>
-                <option value="manager">Менеджер</option>
-                <option value="developer">Разработчик</option>
-                <option value="tester">Тестировщик</option>
-              </select>
-            </div>
-          </div>
-          <div class="modal-actions">
-            <button @click="updateMemberRole" class="action-btn">Сохранить</button>
-            <button @click="closeEditModal" class="cancel-btn">Отмена</button>
-          </div>
-        </div>
-      </div>
-
-      <!-- Модальное окно подтверждения удаления -->
-      <div v-if="showRemoveModal" class="modal-overlay" @click.self="closeRemoveModal">
-        <div class="modal">
-          <h2>Удаление участника</h2>
-          <p>Вы уверены, что хотите удалить участника "{{ selectedMember?.name }}" из проекта?</p>
-          <div class="modal-actions">
-            <button @click="removeMember" class="action-btn remove-btn">Удалить</button>
-            <button @click="closeRemoveModal" class="cancel-btn">Отмена</button>
-          </div>
-        </div>
+    <div v-else-if="error" class="error-container">
+      <div class="error-icon">⚠</div>
+      <p>{{ error }}</p>
+      <button class="retry-button" @click="refreshMembers">Попробовать снова</button>
+    </div>
+    
+    <div v-else class="members-table-container">
+      <div class="table-wrapper">
+        <table class="members-table">
+          <thead>
+            <tr>
+              <th class="avatar-column">Фото</th>
+              <th>Имя</th>
+              <th>Логин</th>
+              <th>Email</th>
+              <th>Роль</th>
+              <th>Статус</th>
+              <th>Действия</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="member in members" :key="member.id" class="member-row">
+              <td class="avatar-cell">
+                <div class="avatar-wrapper">
+                  <img 
+                    :src="getAvatarUrl(member.avatar_url)" 
+                    :alt="member.name"
+                    class="avatar"
+                    @error="handleAvatarError"
+                  >
+                </div>
+              </td>
+              <td class="name-cell">{{ member.name }}</td>
+              <td class="username-cell">@{{ member.username }}</td>
+              <td class="email-cell">{{ member.email }}</td>
+              <td class="role-cell">
+                <div class="role-selector" v-if="isEditingRole(member.id)">
+                  <div class="role-select-wrapper">
+                    <select 
+                      v-model="editingRole" 
+                      class="role-select"
+                    >
+                      <option value="project_manager">Менеджер проекта</option>
+                      <option value="developer">Разработчик</option>
+                    </select>
+                    <div class="role-actions">
+                      <button class="save-role" @click="saveUserRole(member.id)" title="Сохранить">
+                        <span class="icon">✓</span>
+                      </button>
+                      <button class="cancel-role" @click="cancelRoleEdit" title="Отмена">
+                        <span class="icon">✕</span>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+                <span 
+                  v-else 
+                  :class="['role-badge', getRoleClass(member.userSettings?.us_role || 'developer')]"
+                  @click="startRoleEdit(member.id, member.userSettings?.us_role || 'developer')"
+                >
+                  {{ getRoleDisplayName(member.userSettings?.us_role || 'developer') }}
+                </span>
+              </td>
+              <td class="status-cell">
+                <span :class="['status-badge', member.state === 'active' ? 'active' : 'inactive']">
+                  {{ member.state === 'active' ? 'Активен' : 'Неактивен' }}
+                </span>
+              </td>
+              <td class="actions-cell">
+                <button 
+                  class="edit-button"
+                  @click="startRoleEdit(member.id, member.userSettings?.us_role || 'developer')"
+                  v-if="!isEditingRole(member.id)"
+                >
+                  Изменить роль
+                </button>
+              </td>
+            </tr>
+          </tbody>
+        </table>
       </div>
     </div>
   </div>
 </template>
 
 <script>
-import axios from 'axios';
-import { useToast } from 'vue-toastification';
-
-const api = axios.create({
-  baseURL: 'http://localhost:4000',
-  headers: {
-    'Content-Type': 'application/json',
-  }
-});
+import axios from 'axios'
 
 export default {
   name: 'MembersPage',
@@ -120,196 +110,99 @@ export default {
       members: [],
       loading: true,
       error: null,
-      searchQuery: '',
-      roleFilter: '',
-      showEditModal: false,
-      showRemoveModal: false,
-      selectedMember: null,
-      newRole: '',
-      currentUserId: null,
-      toast: useToast()
-    };
-  },
-  computed: {
-    filteredMembers() {
-      return this.members.filter(member => {
-        const matchesSearch = member.name.toLowerCase().includes(this.searchQuery.toLowerCase()) ||
-                            member.username.toLowerCase().includes(this.searchQuery.toLowerCase());
-        const matchesRole = !this.roleFilter || member.userSettings?.us_role === this.roleFilter;
-        return matchesSearch && matchesRole;
-      });
-    },
-    canManageMembers() {
-      // Проверяем, является ли текущий пользователь администратором или менеджером
-      const currentMember = this.members.find(m => m.id === this.currentUserId);
-      return currentMember && ['admin', 'manager'].includes(currentMember.userSettings?.us_role);
+      editingMemberId: null,
+      editingRole: null,
+      defaultAvatar: 'https://www.gravatar.com/avatar/00000000000000000000000000000000?d=mp&f=y'
     }
   },
   methods: {
-    async fetchMembers() {
+    async refreshMembers() {
+      this.loading = true
+      this.error = null
       try {
-        const token = localStorage.getItem('token');
-        if (!token) {
-          throw new Error('Отсутствует токен авторизации');
-        }
-
-        // Получаем участников из GitLab
-        const gitlabResponse = await api.get(`/api/gitlab/projects/${this.$route.params.id}/members`, {
-          headers: {
-            Authorization: `Bearer ${token}`
-          }
-        });
-
-        // Получаем настройки пользователей из нашей БД
-        const settingsResponse = await api.get('/api/users/settings', {
-          headers: {
-            Authorization: `Bearer ${token}`
-          }
-        });
-
-        // Объединяем данные
-        this.members = gitlabResponse.data.map(member => ({
+        const response = await axios.get('/api/gitlab/members')
+        this.members = response.data.map(member => ({
           ...member,
-          userSettings: settingsResponse.data.find(s => s.us_user_id === member.id)
-        }));
-        
-        // Получаем ID текущего пользователя
-        const currentUserResponse = await api.get('/api/users/current', {
-          headers: {
-            Authorization: `Bearer ${token}`
+          userSettings: {
+            us_role: member.userSettings?.us_role || 'developer'
           }
-        });
-        this.currentUserId = currentUserResponse.data.id;
-      } catch (error) {
-        console.error('Ошибка при получении участников:', error);
-        this.error = 'Не удалось загрузить список участников';
-        this.toast.error(this.error);
+        }))
+        console.log('Loaded members:', this.members)
+      } catch (err) {
+        this.error = 'Failed to load team members. Please try again later.'
+        console.error('Error fetching members:', err)
       } finally {
-        this.loading = false;
+        this.loading = false
       }
     },
-
-    getRoleName(role) {
-      const roles = {
-        admin: 'Администратор',
-        manager: 'Менеджер',
-        developer: 'Разработчик',
-        tester: 'Тестировщик'
-      };
-      return roles[role] || 'Разработчик';
+    getAvatarUrl(avatarUrl) {
+      if (!avatarUrl || avatarUrl === '') {
+        return this.defaultAvatar
+      }
+      return avatarUrl
     },
-
-    formatDate(dateString) {
-      if (!dateString) return 'Не указана';
-      const date = new Date(dateString);
-      return date.toLocaleDateString('ru-RU', {
-        year: 'numeric',
-        month: 'long',
-        day: 'numeric'
-      });
+    handleAvatarError(e) {
+      e.target.src = this.defaultAvatar
     },
-
-    openEditModal(member) {
-      this.selectedMember = member;
-      this.newRole = member.userSettings?.us_role || 'developer';
-      this.showEditModal = true;
+    getRoleClass(role) {
+      const roleMap = {
+        'project_manager': 'project-manager',
+        'developer': 'developer'
+      }
+      const normalizedRole = role?.toLowerCase() || 'developer'
+      return roleMap[normalizedRole] || 'developer'
     },
-
-    closeEditModal() {
-      this.showEditModal = false;
-      this.selectedMember = null;
-      this.newRole = '';
+    getRoleDisplayName(role) {
+      const roleMap = {
+        'project_manager': 'Менеджер проекта',
+        'developer': 'Разработчик'
+      }
+      const normalizedRole = role?.toLowerCase() || 'developer'
+      return roleMap[normalizedRole] || 'Разработчик'
     },
+    isEditingRole(memberId) {
+      return this.editingMemberId === memberId
+    },
+    startRoleEdit(memberId, currentRole) {
+      this.editingMemberId = memberId
+      this.editingRole = currentRole?.toLowerCase() || 'developer'
+    },
+    cancelRoleEdit() {
+      this.editingMemberId = null
+      this.editingRole = null
+    },
+    async saveUserRole(memberId) {
+      if (!this.editingRole) {
+        this.error = 'Роль не выбрана'
+        return
+      }
 
-    async updateMemberRole() {
       try {
-        const token = localStorage.getItem('token');
-        if (!token) {
-          throw new Error('Отсутствует токен авторизации');
-        }
-
-        // Обновляем роль в нашей БД
-        await api.put(
-          `/api/users/${this.selectedMember.id}/settings`,
-          {
-            role: this.newRole
-          },
-          {
-            headers: {
-              Authorization: `Bearer ${token}`
-            }
-          }
-        );
-
-        // Обновляем роль в локальном списке
-        const memberIndex = this.members.findIndex(m => m.id === this.selectedMember.id);
+        await axios.put(`/api/gitlab/users/${memberId}/role`, {
+          role: this.editingRole
+        })
+        
+        // Обновляем роль в локальном состоянии
+        const memberIndex = this.members.findIndex(m => m.id === memberId)
         if (memberIndex !== -1) {
-          this.members[memberIndex].userSettings = {
-            ...this.members[memberIndex].userSettings,
-            us_role: this.newRole
-          };
-        }
-
-        this.toast.success('Роль участника успешно обновлена');
-        this.closeEditModal();
-      } catch (error) {
-        console.error('Ошибка при обновлении роли:', error);
-        this.toast.error('Не удалось обновить роль участника');
-      }
-    },
-
-    openRemoveModal(member) {
-      this.selectedMember = member;
-      this.showRemoveModal = true;
-    },
-
-    closeRemoveModal() {
-      this.showRemoveModal = false;
-      this.selectedMember = null;
-    },
-
-    async removeMember() {
-      try {
-        const token = localStorage.getItem('token');
-        if (!token) {
-          throw new Error('Отсутствует токен авторизации');
-        }
-
-        // Удаляем участника из GitLab
-        await api.delete(
-          `/api/gitlab/projects/${this.$route.params.id}/members/${this.selectedMember.id}`,
-          {
-            headers: {
-              Authorization: `Bearer ${token}`
-            }
+          if (!this.members[memberIndex].userSettings) {
+            this.members[memberIndex].userSettings = {}
           }
-        );
-
-        // Удаляем настройки пользователя из нашей БД
-        await api.delete(
-          `/api/users/${this.selectedMember.id}/settings`,
-          {
-            headers: {
-              Authorization: `Bearer ${token}`
-            }
-          }
-        );
-
-        // Удаляем участника из локального списка
-        this.members = this.members.filter(m => m.id !== this.selectedMember.id);
-
-        this.toast.success('Участник успешно удален из проекта');
-        this.closeRemoveModal();
-      } catch (error) {
-        console.error('Ошибка при удалении участника:', error);
-        this.toast.error('Не удалось удалить участника из проекта');
+          this.members[memberIndex].userSettings.us_role = this.editingRole
+          // Принудительно обновляем массив для реактивности
+          this.members = [...this.members]
+        }
+        this.cancelRoleEdit()
+      } catch (err) {
+        console.error('Error updating user role:', err)
+        this.error = err.response?.data?.error || 'Failed to update user role. Please try again.'
       }
     }
   },
-  created() {
-    this.fetchMembers();
+  async created() {
+    await this.refreshMembers()
   }
-};
+}
 </script>
 
 <style scoped>
@@ -317,245 +210,324 @@ export default {
   padding: 2rem;
   max-width: 1200px;
   margin: 0 auto;
+  background-color: #ffffff;
+  border-radius: 12px;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
 }
 
-h1 {
-  font-size: 2.2rem;
-  color: #2c3e50;
+.page-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
   margin-bottom: 2rem;
-  padding-bottom: 0.5rem;
-  border-bottom: 2px solid #3498db;
+  padding-bottom: 1rem;
+  border-bottom: 2px solid #f0f0f0;
 }
 
-.search-section {
+.page-header h1 {
+  font-size: 2rem;
+  color: #2c3e50;
+  margin: 0;
+  font-weight: 600;
+}
+
+.header-actions {
   display: flex;
   gap: 1rem;
-  margin-bottom: 2rem;
 }
 
-.search-input {
-  flex: 1;
-  padding: 0.75rem;
-  border: 1px solid #ddd;
-  border-radius: 6px;
-  font-size: 1rem;
+.refresh-button {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.75rem 1.25rem;
+  background-color: #f8f9fa;
+  border: 1px solid #e9ecef;
+  border-radius: 8px;
+  color: #495057;
+  font-size: 0.95rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
 }
 
-.role-filter {
-  padding: 0.75rem;
-  border: 1px solid #ddd;
-  border-radius: 6px;
-  font-size: 1rem;
-  min-width: 150px;
+.refresh-button:hover {
+  background-color: #e9ecef;
+  color: #212529;
+  transform: translateY(-1px);
 }
 
-.members-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-  gap: 1.5rem;
+.refresh-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 
-.member-card {
-  background: white;
-  border-radius: 10px;
-  padding: 1.5rem;
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+.refresh-icon {
+  font-size: 1.1rem;
+}
+
+.loading-container {
   display: flex;
   flex-direction: column;
-  gap: 1rem;
+  align-items: center;
+  justify-content: center;
+  padding: 3rem;
+  color: #6c757d;
 }
 
-.member-avatar {
+.loading-spinner {
+  width: 40px;
+  height: 40px;
+  border: 3px solid #f3f3f3;
+  border-top: 3px solid #3498db;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+  margin-bottom: 1rem;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+.error-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 3rem;
+  color: #dc3545;
+  text-align: center;
+}
+
+.error-icon {
+  font-size: 2rem;
+  margin-bottom: 1rem;
+}
+
+.retry-button {
+  margin-top: 1rem;
+  padding: 0.75rem 1.5rem;
+  background-color: #dc3545;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  font-size: 0.95rem;
+}
+
+.retry-button:hover {
+  background-color: #c82333;
+  transform: translateY(-1px);
+}
+
+.members-table-container {
+  overflow-x: auto;
+  border-radius: 8px;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.05);
+}
+
+.table-wrapper {
+  min-width: 100%;
+}
+
+.members-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  background-color: white;
+}
+
+.members-table th {
+  background-color: #f8f9fa;
+  color: #495057;
+  font-weight: 600;
+  text-align: left;
+  padding: 1rem;
+  border-bottom: 2px solid #e9ecef;
+  white-space: nowrap;
+}
+
+.members-table td {
+  padding: 1rem;
+  border-bottom: 1px solid #e9ecef;
+  color: #212529;
+}
+
+.member-row:hover {
+  background-color: #f8f9fa;
+}
+
+.avatar-column {
   width: 80px;
-  height: 80px;
+}
+
+.avatar-wrapper {
+  width: 40px;
+  height: 40px;
   border-radius: 50%;
   overflow: hidden;
-  margin: 0 auto;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
 
-.member-avatar img {
+.avatar {
   width: 100%;
   height: 100%;
   object-fit: cover;
 }
 
-.member-info {
-  text-align: center;
-}
-
-.member-info h3 {
-  margin: 0;
+.name-cell {
+  font-weight: 500;
   color: #2c3e50;
-  font-size: 1.2rem;
 }
 
-.member-username {
-  color: #666;
-  margin: 0.3rem 0;
+.username-cell {
+  color: #6c757d;
 }
 
-.member-role {
-  display: inline-block;
-  padding: 0.3rem 0.8rem;
-  border-radius: 20px;
-  font-size: 0.9rem;
-  margin: 0.5rem 0;
+.email-cell {
+  color: #495057;
 }
 
-.member-role.admin {
-  background-color: #e3f2fd;
-  color: #1565c0;
-}
-
-.member-role.manager {
-  background-color: #e8f5e9;
-  color: #2e7d32;
-}
-
-.member-role.developer {
-  background-color: #fff8e1;
-  color: #f57f17;
-}
-
-.member-role.tester {
-  background-color: #f3e5f5;
-  color: #7b1fa2;
-}
-
-.member-email {
-  color: #666;
-  font-size: 0.9rem;
-  margin: 0.3rem 0;
-}
-
-.member-joined {
-  color: #888;
-  font-size: 0.85rem;
-  margin: 0.3rem 0;
-}
-
-.member-actions {
+.role-selector {
   display: flex;
-  gap: 0.5rem;
-  margin-top: auto;
-}
-
-.action-btn {
-  padding: 0.5rem 1rem;
-  border: none;
-  border-radius: 6px;
-  cursor: pointer;
-  font-size: 0.9rem;
-  transition: all 0.3s ease;
-  flex: 1;
-}
-
-.edit-btn {
-  background-color: #3498db;
-  color: white;
-}
-
-.edit-btn:hover {
-  background-color: #2980b9;
-}
-
-.remove-btn {
-  background-color: #e74c3c;
-  color: white;
-}
-
-.remove-btn:hover {
-  background-color: #c0392b;
-}
-
-.modal-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background-color: rgba(0, 0, 0, 0.5);
-  display: flex;
-  justify-content: center;
   align-items: center;
-  z-index: 1000;
+  gap: 0.5rem;
 }
 
-.modal {
-  background: white;
-  padding: 2rem;
-  border-radius: 10px;
-  width: 90%;
-  max-width: 500px;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
-}
-
-.modal h2 {
-  margin-top: 0;
-  color: #2c3e50;
-  font-size: 1.5rem;
-  margin-bottom: 1.5rem;
-}
-
-.modal-content {
-  margin-bottom: 1.5rem;
-}
-
-.form-group {
-  margin-bottom: 1rem;
-}
-
-.form-group label {
-  display: block;
-  margin-bottom: 0.5rem;
-  color: #2c3e50;
+.role-select-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  background-color: #f8f9fa;
+  padding: 0.5rem;
+  border-radius: 8px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
 }
 
 .role-select {
-  width: 100%;
-  padding: 0.75rem;
-  border: 1px solid #ddd;
+  padding: 0.5rem;
+  border: 1px solid #e9ecef;
   border-radius: 6px;
-  font-size: 1rem;
+  background-color: white;
+  font-size: 0.9rem;
+  color: #495057;
+  min-width: 150px;
+  cursor: pointer;
+  transition: all 0.2s ease;
 }
 
-.modal-actions {
+.role-select:hover {
+  border-color: #ced4da;
+}
+
+.role-select:focus {
+  outline: none;
+  border-color: #80bdff;
+  box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, 0.25);
+}
+
+.role-actions {
   display: flex;
-  justify-content: flex-end;
-  gap: 1rem;
+  gap: 0.25rem;
 }
 
-.cancel-btn {
-  padding: 0.75rem 1.5rem;
-  background-color: #95a5a6;
+.save-role,
+.cancel-role {
+  padding: 0.5rem;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+}
+
+.save-role {
+  background-color: #28a745;
+  color: white;
+}
+
+.save-role:hover {
+  background-color: #218838;
+  transform: translateY(-1px);
+}
+
+.cancel-role {
+  background-color: #dc3545;
+  color: white;
+}
+
+.cancel-role:hover {
+  background-color: #c82333;
+  transform: translateY(-1px);
+}
+
+.edit-button {
+  padding: 0.5rem 1rem;
+  background-color: #007bff;
   color: white;
   border: none;
   border-radius: 6px;
   cursor: pointer;
-  font-size: 1rem;
-  transition: all 0.3s ease;
+  font-size: 0.9rem;
+  transition: all 0.2s ease;
 }
 
-.cancel-btn:hover {
-  background-color: #7f8c8d;
+.edit-button:hover {
+  background-color: #0056b3;
+  transform: translateY(-1px);
 }
 
-.loading, .error {
+.role-badge {
+  display: inline-block;
+  padding: 0.5rem 1rem;
+  border-radius: 20px;
+  font-size: 0.9rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
   text-align: center;
-  padding: 2rem;
-  font-size: 1.2rem;
-  border-radius: 8px;
-  margin: 2rem 0;
+  min-width: 120px;
 }
 
-.loading {
-  background-color: #f8f9fa;
-  color: #7f8c8d;
+.role-badge:hover {
+  transform: scale(1.05);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
 
-.error {
-  background-color: #fdecea;
-  color: #e74c3c;
+.role-badge.project-manager {
+  background-color: #4CAF50;
+  color: white;
+}
+
+.role-badge.developer {
+  background-color: #2196F3;
+  color: white;
+}
+
+.status-badge {
+  display: inline-block;
+  padding: 0.5rem 1rem;
+  border-radius: 20px;
+  font-size: 0.9rem;
+  font-weight: 500;
+  text-align: center;
+  min-width: 100px;
+}
+
+.status-badge.active {
+  background-color: #28a745;
+  color: white;
+}
+
+.status-badge.inactive {
+  background-color: #6c757d;
+  color: white;
 }
 
 @media (max-width: 768px) {
@@ -563,21 +535,30 @@ h1 {
     padding: 1rem;
   }
 
-  .search-section {
+  .page-header {
     flex-direction: column;
+    align-items: flex-start;
+    gap: 1rem;
   }
 
-  .members-grid {
-    grid-template-columns: 1fr;
+  .members-table th,
+  .members-table td {
+    padding: 0.75rem;
   }
 
-  .member-card {
-    padding: 1rem;
+  .avatar-wrapper {
+    width: 32px;
+    height: 32px;
   }
 
-  .modal {
-    width: 95%;
-    padding: 1.5rem;
+  .role-badge {
+    min-width: 100px;
+    padding: 0.4rem 0.8rem;
+  }
+
+  .status-badge {
+    min-width: 80px;
+    padding: 0.4rem 0.8rem;
   }
 }
 </style>
