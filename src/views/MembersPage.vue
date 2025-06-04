@@ -6,7 +6,7 @@
         <button class="refresh-button" @click="refreshMembers" :disabled="loading">
           <span class="refresh-icon">↻</span>
           Обновить
-        </button>
+      </button>
       </div>
     </div>
     
@@ -45,7 +45,7 @@
                     class="avatar"
                     @error="handleAvatarError"
                   >
-                </div>
+          </div>
               </td>
               <td class="name-cell">{{ member.name }}</td>
               <td class="username-cell">@{{ member.username }}</td>
@@ -67,9 +67,9 @@
                       <button class="cancel-role" @click="cancelRoleEdit" title="Отмена">
                         <span class="icon">✕</span>
                       </button>
-                    </div>
-                  </div>
-                </div>
+            </div>
+          </div>
+        </div>
                 <span 
                   v-else 
                   :class="['role-badge', getRoleClass(member.userSettings?.us_role || 'developer')]"
@@ -96,7 +96,7 @@
           </tbody>
         </table>
       </div>
-    </div>
+      </div>
   </div>
 </template>
 

@@ -1,46 +1,86 @@
 <template>
   <div class="create-project">
-    <div class="header-with-dates">
-      <h2>Создание проекта</h2>
-      <div class="project-dates">
-        <label for="start-date">Дата начала:</label>
-        <input type="date" id="start-date" v-model="startDate" required />
-        <label for="end-date">Дата окончания:</label>
-        <input type="date" id="end-date" v-model="endDate" required />
+    <div class="create-project__header">
+      <h2>Создание нового проекта</h2>
+      <div class="create-project__creator">
+        <span class="creator-label">Создатель:</span>
+        <span class="creator-name">{{ creatorName }}</span>
       </div>
     </div>
 
-    <form @submit.prevent="submitProject" class="project-form">
-      <label for="project-name">Название проекта:</label>
-      <input type="text" id="project-name" v-model="projectName" required />
+    <div class="create-project__form">
+      <div class="form-group">
+        <label for="projectName">Название проекта</label>
+        <input
+          id="projectName"
+          v-model="projectName"
+          type="text"
+          placeholder="Введите название проекта"
+          class="form-control"
+        />
+      </div>
 
-      <button type="button" @click="toggleDescription" class="btn-description">
-        {{ showDescription ? "Скрыть описание" : "Добавить описание" }}
-      </button>
-      <textarea
-        v-if="showDescription"
-        v-model="projectDescription"
-        placeholder="Введите описание проекта..."
-        class="description-field"
-      ></textarea>
+      <div class="form-group">
+        <div class="description-toggle" @click="toggleDescription">
+          <span>Описание проекта</span>
+          <span class="toggle-icon">{{ showDescription ? '▼' : '▶' }}</span>
+        </div>
+        <textarea
+          v-if="showDescription"
+          v-model="projectDescription"
+          placeholder="Введите описание проекта"
+          class="form-control description-textarea"
+        ></textarea>
+      </div>
 
-      <div class="visibility-options">
-        <label>Видимость проекта:</label>
-        <select v-model="visibility" class="visibility-select">
+      <div class="form-group">
+        <label for="startDate">Дата начала</label>
+        <input
+          id="startDate"
+          v-model="startDate"
+          type="date"
+          class="form-control"
+        />
+      </div>
+
+      <div class="form-group">
+        <label for="endDate">Дата окончания</label>
+        <input
+          id="endDate"
+          v-model="endDate"
+          type="date"
+          class="form-control"
+        />
+      </div>
+
+      <div class="form-group">
+        <label for="visibility">Видимость проекта</label>
+        <select
+          id="visibility"
+          v-model="visibility"
+          class="form-control"
+        >
           <option value="private">Приватный</option>
           <option value="internal">Внутренний</option>
           <option value="public">Публичный</option>
         </select>
       </div>
 
-      <button type="submit" class="btn-save">Создать проект</button>
-    </form>
-
-    <div class="user-info" v-if="creatorName">
-      <p>Создатель проекта: {{ creatorName }}</p>
+      <div class="form-actions">
+        <button
+          @click="$emit('close')"
+          class="btn btn-secondary"
+        >
+          Отмена
+        </button>
+        <button
+          @click="submitProject"
+          class="btn btn-primary"
+        >
+          Создать проект
+        </button>
+      </div>
     </div>
-
- 
   </div>
 </template>
 
@@ -58,33 +98,18 @@ export default {
       startDate: "",
       endDate: "",
       showDescription: false,
-      selectedUser: null,
-      selectedProjectUser: null,
-      availableUsers: [],
-      projectUsers: [],
       creatorName: "",
       visibility: "private"
     };
   },
   mounted() {
     this.loadCreatorInfo();
-    this.fetchUsers();
   },
   methods: {
     loadCreatorInfo() {
       try {
         const userData = JSON.parse(localStorage.getItem('user')) || {};
         this.creatorName = userData.name || 'Неизвестный создатель';
-        
-        // Автоматически добавляем создателя в участники
-        if (userData.id) {
-          this.projectUsers.push({
-            UsrID: userData.id,
-            UsrName: userData.name?.split(' ')[0] || 'Создатель',
-            UsrSurname: userData.name?.split(' ')[1] || '',
-            UsrRole: userData.role || 'Менеджер'
-          });
-        }
       } catch (e) {
         console.error("Ошибка загрузки данных создателя:", e);
         this.creatorName = "Неизвестный создатель";
@@ -93,87 +118,6 @@ export default {
 
     toggleDescription() {
       this.showDescription = !this.showDescription;
-    },
-    
-    async fetchUsers() {
-      const token = localStorage.getItem('token');
-      if (!token) {
-        this.toast.error("Ошибка: отсутствует токен авторизации.");
-        return;
-      }
-
-      try {
-        const response = await fetch("http://localhost:4000/api/users", {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        });
-
-        if (response.ok) {
-          const data = await response.json();
-          if (Array.isArray(data)) {
-            const currentUserId = JSON.parse(localStorage.getItem('user'))?.id;
-            this.availableUsers = data
-              .filter(user => user.UsrID !== currentUserId)
-              .map(user => ({
-                UsrID: user.UsrID,
-                UsrName: user.UsrName || '',
-                UsrPatronomic: user.UsrPatronomic || '',
-                UsrSurname: user.UsrSurname || '',
-                UsrRole: user.UsrRole || 'Участник'
-              }));
-          }
-        } else {
-          const errorData = await response.json();
-          this.toast.error("Ошибка загрузки пользователей: " + (errorData.error || 'Неизвестная ошибка'));
-        }
-      } catch (error) {
-        console.error("Ошибка при загрузке пользователей:", error);
-        this.toast.error("Ошибка при загрузке пользователей");
-      }
-    },
-
-    addUserToProject() {
-      if (!this.selectedUser) {
-        this.toast.warning("Выберите пользователя для добавления");
-        return;
-      }
-
-      const exists = this.projectUsers.some(
-        user => user.UsrID === this.selectedUser.UsrID
-      );
-
-      if (!exists) {
-        this.projectUsers.push({...this.selectedUser});
-        this.availableUsers = this.availableUsers.filter(
-          user => user.UsrID !== this.selectedUser.UsrID
-        );
-        this.toast.success("Пользователь добавлен в проект");
-      } else {
-        this.toast.warning("Этот пользователь уже в проекте");
-      }
-      this.selectedUser = null;
-    },
-
-    removeUserFromProject() {
-      if (!this.selectedProjectUser) {
-        this.toast.warning("Выберите пользователя для удаления");
-        return;
-      }
-
-      // Проверяем, не является ли пользователь создателем
-      const currentUserId = JSON.parse(localStorage.getItem('user'))?.id;
-      if (this.selectedProjectUser.UsrID === currentUserId) {
-        this.toast.error("Нельзя удалить создателя проекта");
-        return;
-      }
-
-      this.availableUsers.push({...this.selectedProjectUser});
-      this.projectUsers = this.projectUsers.filter(
-        user => user.UsrID !== this.selectedProjectUser.UsrID
-      );
-      this.toast.success("Пользователь удален из проекта");
-      this.selectedProjectUser = null;
     },
 
     validateProjectData() {
@@ -205,62 +149,50 @@ export default {
     },
 
     async submitProject() {
-  if (!this.validateProjectData()) return;
+      if (!this.validateProjectData()) return;
 
-  const token = localStorage.getItem('token');
-  if (!token) {
-    this.toast.error("Ошибка авторизации");
-    return;
-  }
+      const token = localStorage.getItem('token');
+      if (!token) {
+        this.toast.error("Ошибка авторизации");
+        return;
+      }
 
       // Форматируем даты в ISO формат
       const formattedStartDate = new Date(this.startDate).toISOString().split('T')[0];
       const formattedEndDate = new Date(this.endDate).toISOString().split('T')[0];
 
-      // Данные для GitLab API
-      const gitlabData = {
-        name: this.projectName.trim(),
-        description: this.projectDescription.trim() || "",
-        visibility: this.visibility,
-    initialize_with_readme: true,
-        default_branch: 'main',
-        path: this.projectName.trim().toLowerCase().replace(/[^a-z0-9-]/g, '-'),
-        request_access_enabled: false
-  };
-
-      console.log('Отправляемые данные в GitLab:', gitlabData);
-
-  try {
-        const response = await fetch("http://localhost:4000/api/projects", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": `Bearer ${token}`
-      },
+      try {
+        const response = await fetch("http://localhost:4000/api/gitlab/projects", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${token}`
+          },
           body: JSON.stringify({
-            gitlab_project: gitlabData,
+            name: this.projectName.trim(),
+            description: this.projectDescription.trim() || "",
+            visibility: this.visibility,
             start_date: formattedStartDate,
             end_date: formattedEndDate
           })
         });
 
         const responseData = await response.json();
-        console.log('Полный ответ сервера:', responseData);
 
         if (!response.ok) {
-          console.error('Статус ответа:', response.status);
-          console.error('Заголовки ответа:', Object.fromEntries(response.headers.entries()));
-          throw new Error(responseData.message || responseData.error || "Ошибка при создании проекта");
-    }
+          const errorMessage = responseData.error || responseData.message || "Неизвестная ошибка";
+          throw new Error(errorMessage);
+        }
 
         this.toast.success("Проект успешно создан!");
-    this.$emit('projectCreated');
-    this.resetForm();
-  } catch (error) {
-        console.error("Полная ошибка:", error);
-    this.toast.error(`Ошибка: ${error.message}`);
-  }
-},
+        this.$emit('projectCreated');
+        this.resetForm();
+      } catch (error) {
+        console.error("Ошибка при создании проекта:", error);
+        const errorMessage = error instanceof Error ? error.message : "Произошла ошибка при создании проекта";
+        this.toast.error(errorMessage);
+      }
+    },
 
     resetForm() {
       this.projectName = "";
@@ -268,10 +200,6 @@ export default {
       this.startDate = "";
       this.endDate = "";
       this.showDescription = false;
-      this.selectedUser = null;
-      this.selectedProjectUser = null;
-      this.projectUsers = [];
-      this.loadCreatorInfo(); // Снова добавляем создателя
       this.visibility = "private";
     }
   },
@@ -286,7 +214,7 @@ export default {
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
 }
 
-.header-with-dates {
+.create-project__header {
   display: flex;
   flex-direction: column;
   gap: 1.5rem;
@@ -295,39 +223,37 @@ export default {
   border-bottom: 1px solid #eaeaea;
 }
 
-.header-with-dates h2 {
+.create-project__header h2 {
   font-size: 1.8rem;
   color: #2c3e50;
   margin: 0;
 }
 
-.project-dates {
+.create-project__creator {
   display: flex;
-  gap: 1.5rem;
   align-items: center;
-  flex-wrap: wrap;
-}
-
-.project-dates label {
-  font-weight: 500;
+  gap: 0.5rem;
+  font-size: 0.95rem;
   color: #4a5568;
-  margin-right: 0.5rem;
-  font-size: 0.95rem;
 }
 
-.project-dates input {
-  padding: 0.6rem 0.8rem;
-  border: 1px solid #e2e8f0;
-  border-radius: 6px;
-  font-size: 0.95rem;
-  transition: all 0.2s ease;
+.create-project__creator .creator-label {
+  font-weight: 500;
 }
 
-.project-form {
+.create-project__creator .creator-name {
+  font-weight: 400;
+}
+
+.create-project__form {
   margin-bottom: 2rem;
 }
 
-.project-form label {
+.form-group {
+  margin-bottom: 1.5rem;
+}
+
+.form-group label {
   display: block;
   margin-bottom: 0.5rem;
   font-weight: 500;
@@ -335,29 +261,37 @@ export default {
   font-size: 0.95rem;
 }
 
-.project-form input {
+.form-group input,
+.form-group select {
   width: 100%;
   padding: 0.8rem;
   border: 1px solid #e2e8f0;
   border-radius: 6px;
-  margin-bottom: 1.5rem;
   font-size: 1rem;
   transition: all 0.2s ease;
 }
 
-.btn-description {
-  background-color: #edf2f7;
-  color: #2d3748;
-  border: none;
-  border-radius: 6px;
-  padding: 0.7rem 1.2rem;
-  margin-bottom: 1.5rem;
-  font-size: 0.95rem;
-  cursor: pointer;
-  transition: all 0.2s ease;
+.form-group input:focus,
+.form-group select:focus {
+  outline: none;
+  border-color: #4299e1;
+  box-shadow: 0 0 0 3px rgba(66, 153, 225, 0.2);
 }
 
-.description-field {
+.description-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  cursor: pointer;
+  font-weight: 500;
+  color: #4a5568;
+}
+
+.toggle-icon {
+  font-size: 0.8rem;
+}
+
+.description-textarea {
   width: 100%;
   min-height: 120px;
   padding: 0.8rem;
@@ -368,33 +302,41 @@ export default {
   resize: vertical;
 }
 
-.visibility-options {
-  margin-bottom: 1.5rem;
+.form-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
 }
 
-.visibility-select {
-  width: 100%;
-  padding: 0.8rem;
-  border: 1px solid #e2e8f0;
-  border-radius: 6px;
-  font-size: 1rem;
-  background-color: white;
-}
-
-.btn-save {
-  width: 100%;
-  padding: 0.9rem;
-  background-color: #48bb78;
-  color: white;
+.btn-secondary {
+  background-color: #edf2f7;
+  color: #2d3748;
   border: none;
   border-radius: 6px;
+  padding: 0.7rem 1.2rem;
   font-weight: 500;
   font-size: 1rem;
   cursor: pointer;
   transition: all 0.2s ease;
 }
 
-.btn-save:hover {
+.btn-secondary:hover {
+  background-color: #e2e8f0;
+}
+
+.btn-primary {
+  background-color: #48bb78;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  padding: 0.9rem;
+  font-weight: 500;
+  font-size: 1rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.btn-primary:hover {
   background-color: #38a169;
 }
 
@@ -498,12 +440,12 @@ option:hover {
     padding: 1.5rem;
   }
   
-  .header-with-dates {
+  .create-project__header {
     flex-direction: column;
     gap: 1rem;
   }
   
-  .project-dates {
+  .create-project__creator {
     flex-direction: column;
     align-items: flex-start;
     gap: 1rem;
@@ -515,13 +457,13 @@ option:hover {
     padding: 1rem;
   }
   
-  .header-with-dates h2 {
+  .create-project__header h2 {
     font-size: 1.5rem;
   }
   
   .btn-add,
   .btn-remove,
-  .btn-save {
+  .btn-primary {
     padding: 0.6rem 1rem;
   }
 }
