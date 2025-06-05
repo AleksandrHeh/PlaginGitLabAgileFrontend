@@ -5,12 +5,11 @@
       <div class="sprint-dates">
         <p><strong>Дата начала:</strong> {{ formatDate(sprint.spt_start_date) }}</p>
         <p><strong>Дата окончания:</strong> {{ formatDate(sprint.spt_end_date) }}</p>
-        <p><strong>Осталось задач:</strong> {{ remainingTasks }}</p>
+        <p><strong>Осталось задач:</strong> {{ Math.round(remainingTasks) }}</p>
       </div>
       <button 
         @click="completeSprint" 
         class="complete-btn"
-        :disabled="!canCompleteSprint"
       >
         Завершить спринт
       </button>
@@ -27,7 +26,7 @@
     <!-- Кнопки -->
     <div class="action-buttons">
       <button @click="openBacklogModal" class="action-btn">Добавить задачу из бэклога</button>
-      <button @click="openTaskModal" class="action-btn">Создать новую задачу</button>
+      <button @click="openInstructionsModal" class="instruction-btn">Инструкция</button>
     </div>
 
     <!-- Agile-доска -->
@@ -215,6 +214,59 @@
         </div>
       </div>
     </div>
+
+    <!-- Модальное окно подтверждения завершения спринта -->
+    <div v-if="showCompleteConfirmModal" class="modal-overlay" @click.self="closeCompleteConfirmModal">
+      <div class="modal confirm-modal">
+        <h2>Подтверждение завершения спринта</h2>
+        <p>Вы уверены, что хотите завершить спринт "{{ sprint.spt_title }}"?</p>
+        <p class="warning-text">Это действие нельзя будет отменить.</p>
+        <div class="modal-actions">
+          <button @click="confirmCompleteSprint" class="action-btn">Завершить спринт</button>
+          <button @click="closeCompleteConfirmModal" class="cancel-btn">Отмена</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Модальное окно с инструкциями -->
+    <div v-if="showInstructionsModal" class="modal-overlay" @click.self="closeInstructionsModal">
+      <div class="modal instructions-modal">
+        <h2>Инструкция по работе с задачами</h2>
+        
+        <div class="instructions-section">
+          <h3>Для разработчика</h3>
+          <div class="instruction-steps">
+            <p>Допустим есть задача #123:</p>
+            <ol>
+              <li>Создаем ветку с номером задачи:
+                <pre>git checkout issue-123</pre>
+              </li>
+              <li>Делаем коммит с ключевым словом:
+                <pre>git commit -m "Fix #123"</pre>
+              </li>
+              <li>Отправляем ветку в репозиторий:
+                <pre>git push origin issue-123</pre>
+              </li>
+            </ol>
+          </div>
+        </div>
+
+        <div class="instructions-section">
+          <h3>Для администратора и менеджера проекта</h3>
+          <div class="instruction-steps">
+            <ol>
+              <li>Заходим в проект и переходим на Merge Request</li>
+              <li>Открываем активный Merge Request</li>
+              <li>В поле title и description прописываем "Closes #123"</li>
+            </ol>
+          </div>
+        </div>
+
+        <div class="modal-actions">
+          <button @click="closeInstructionsModal" class="action-btn">Закрыть</button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -279,7 +331,9 @@ export default {
         teamStats: [],
         unfinishedTasksList: []
       },
-      remainingTasks: 0
+      remainingTasks: 0,
+      showCompleteConfirmModal: false,
+      showInstructionsModal: false,
     };
   },
   methods: {
@@ -544,39 +598,48 @@ export default {
       this.showBacklogModal = false;
     },
 
-    async completeSprint() {
-      if (confirm('Вы уверены, что хотите завершить этот спринт? Будет создан отчет по результатам спринта.')) {
-        try {
-          const token = localStorage.getItem('token');
-          if (!token) {
-            throw new Error('Отсутствует токен авторизации');
-          }
+    completeSprint() {
+      this.showCompleteConfirmModal = true;
+    },
 
-          // Обновляем статус спринта на сервере
-          await api.put(
-            `/api/projects/${this.$route.params.id}/sprints/${this.$route.params.sprintId}/complete`,
-            {},
-            {
-              headers: {
-                Authorization: `Bearer ${token}`
-              }
+    closeCompleteConfirmModal() {
+      this.showCompleteConfirmModal = false;
+    },
+
+    async confirmCompleteSprint() {
+      try {
+        const token = localStorage.getItem('token');
+        if (!token) {
+          throw new Error('Отсутствует токен авторизации');
+        }
+
+        // Обновляем статус спринта на сервере
+        await api.put(
+          `/api/projects/${this.$route.params.id}/sprints/${this.$route.params.sprintId}/complete`,
+          {},
+          {
+            headers: {
+              Authorization: `Bearer ${token}`
             }
-          );
+          }
+        );
 
-          // Генерируем отчет
-          await this.generateSprintReport();
-          
-          // Показываем модальное окно с отчетом
-          this.showSprintReportModal = true;
-          
-          // Обновляем статус спринта локально
+        // Генерируем отчет
+        await this.generateSprintReport();
+        
+        // Закрываем модальное окно подтверждения
+        this.closeCompleteConfirmModal();
+        
+        // Показываем модальное окно с отчетом
+        this.showSprintReportModal = true;
+        
+        // Обновляем статус спринта локально
         this.sprint.is_completed = true;
         this.sprint.end_date = new Date().toISOString().split('T')[0];
         
-        } catch (error) {
-          console.error('Ошибка при завершении спринта:', error);
-          alert('Не удалось завершить спринт');
-        }
+      } catch (error) {
+        console.error('Ошибка при завершении спринта:', error);
+        alert('Не удалось завершить спринт');
       }
     },
 
@@ -907,7 +970,15 @@ export default {
       if (!assigneeId) return 'Не назначен';
       const member = this.projectMembers.find(m => m.id === assigneeId);
       return member ? member.name : 'Неизвестный участник';
-    }
+    },
+
+    openInstructionsModal() {
+      this.showInstructionsModal = true;
+    },
+
+    closeInstructionsModal() {
+      this.showInstructionsModal = false;
+    },
   },
   async mounted() {
     try {
@@ -1579,6 +1650,91 @@ h1 {
   
   .task-status {
     align-self: flex-start;
+  }
+}
+
+.confirm-modal {
+  max-width: 500px;
+  text-align: center;
+}
+
+.warning-text {
+  color: #e74c3c;
+  font-weight: 500;
+  margin: 1rem 0;
+}
+
+.instruction-btn {
+  padding: 0.75rem 1.5rem;
+  background-color: #9b59b6;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 1rem;
+  transition: all 0.3s ease;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.instruction-btn:hover {
+  background-color: #8e44ad;
+  transform: translateY(-2px);
+  box-shadow: 0 2px 8px rgba(155, 89, 182, 0.3);
+}
+
+.instructions-modal {
+  max-width: 700px;
+}
+
+.instructions-section {
+  margin-bottom: 2rem;
+  padding: 1.5rem;
+  background-color: #f8f9fa;
+  border-radius: 8px;
+}
+
+.instructions-section h3 {
+  color: #2c3e50;
+  margin: 0 0 1rem 0;
+  font-size: 1.2rem;
+  border-bottom: 2px solid #eee;
+  padding-bottom: 0.5rem;
+}
+
+.instruction-steps {
+  color: #34495e;
+}
+
+.instruction-steps ol {
+  margin: 1rem 0;
+  padding-left: 1.5rem;
+}
+
+.instruction-steps li {
+  margin-bottom: 1rem;
+  line-height: 1.6;
+}
+
+.instruction-steps pre {
+  background-color: #2c3e50;
+  color: #ecf0f1;
+  padding: 0.8rem;
+  border-radius: 4px;
+  margin: 0.5rem 0;
+  font-family: 'Courier New', Courier, monospace;
+  overflow-x: auto;
+}
+
+@media (max-width: 768px) {
+  .instructions-modal {
+    width: 95%;
+    padding: 1rem;
+  }
+  
+  .instruction-steps pre {
+    font-size: 0.9rem;
   }
 }
 </style>

@@ -48,11 +48,20 @@
       <div class="tasks-section">
         <h2>Задачи проекта</h2>
         <ul v-if="tasks && tasks.length > 0" class="tasks-list">
-          <li v-for="task in tasks" :key="task.id" class="task-item">
+          <li v-for="task in tasks" 
+              :key="task.id" 
+              class="task-item"
+              :class="{
+                'status-completed': ['Готово', 'Закрыто', 'Closed', 'Done'].includes(task.si_agile_status),
+                'status-in-progress': ['В работе', 'In Progress'].includes(task.si_agile_status),
+                'status-review': ['На проверке', 'In Review'].includes(task.si_agile_status),
+                'status-todo': ['К выполнению', 'To Do'].includes(task.si_agile_status),
+                'status-blocked': ['Заблокировано', 'Blocked'].includes(task.si_agile_status)
+              }">
             <div class="task-content">
-              <p><strong>Задача:</strong> {{ task.title }}</p>
-              <p><strong>Описание:</strong> {{ task.description || "Нет описания" }}</p>
-              <p><strong>Статус:</strong> {{ task.state }}</p>
+              <p><strong>Задача:</strong> {{ task.si_name_issues || task.title }}</p>
+              <p><strong>Описание:</strong> {{ task.si_description_issue || task.description || "Нет описания" }}</p>
+              <p><strong>Статус:</strong> {{ task.si_agile_status || task.state }}</p>
               <p><strong>Автор:</strong> {{ task.author?.name || "Неизвестно" }}</p>
               <p><strong>Дата создания:</strong> {{ formatDate(task.created_at) }}</p>
             </div>
@@ -819,6 +828,54 @@ h2::before {
   justify-content: space-between;
   align-items: center;
   border-left: 4px solid #3498db;
+}
+
+/* Стили для разных статусов задач */
+.task-item.status-completed {
+  background-color: #f8f9fa;
+  border-left-color: #95a5a6;
+  opacity: 0.8;
+}
+
+.task-item.status-in-progress {
+  border-left-color: #f1c40f;
+}
+
+.task-item.status-review {
+  border-left-color: #3498db;
+}
+
+.task-item.status-todo {
+  border-left-color: #2ecc71;
+}
+
+.task-item.status-blocked {
+  border-left-color: #e74c3c;
+}
+
+/* Стили для текста в зависимости от статуса */
+.task-item.status-completed .task-content {
+  color: #7f8c8d;
+}
+
+.task-item.status-completed .task-content strong {
+  color: #95a5a6;
+}
+
+.task-item.status-in-progress .task-content strong {
+  color: #f39c12;
+}
+
+.task-item.status-review .task-content strong {
+  color: #2980b9;
+}
+
+.task-item.status-todo .task-content strong {
+  color: #27ae60;
+}
+
+.task-item.status-blocked .task-content strong {
+  color: #c0392b;
 }
 
 .task-item:hover, .sprint-item:hover {

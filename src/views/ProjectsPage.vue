@@ -153,8 +153,8 @@ export default {
       });
     },
     openProject(id) {
-      this.$router.push({ name: 'ProjectPage', params: { id } });
-    },
+    this.$router.push({ name: 'ProjectPage', params: { id } });
+  },
     openEditModal(project) {
       this.selectedProject = project;
       this.editedDescription = project.description || '';

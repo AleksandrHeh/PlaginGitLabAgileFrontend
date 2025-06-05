@@ -271,6 +271,15 @@ export default {
   transition: all 0.2s ease;
 }
 
+/* Добавляем специальный класс для select видимости */
+.form-group select#visibility {
+  width: auto;
+  min-width: 150px;
+  padding: 0.3rem 0.8rem;
+  height: 32px;
+  line-height: 1;
+}
+
 .form-group input:focus,
 .form-group select:focus {
   outline: none;
