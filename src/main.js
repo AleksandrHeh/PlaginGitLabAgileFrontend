@@ -6,6 +6,7 @@ import { createPinia } from 'pinia';
 import 'vue-toastification/dist/index.css'; // импорт стилей
 import store from './store'
 import axios from 'axios'
+import '@fortawesome/fontawesome-free/css/all.css'
 
 // Настройка Axios
 axios.defaults.baseURL = 'http://localhost:4000'
@@ -22,6 +23,10 @@ const app = createApp(App);
 app.use(store)
 app.use(router);
 app.use(pinia)
-app.use(Toast);  // подключаем Toast
+app.use(Toast, {
+    transition: "Vue-Toastification__bounce",
+    maxToasts: 3,
+    newestOnTop: true
+})
 
 app.mount('#app');

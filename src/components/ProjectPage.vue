@@ -476,7 +476,7 @@ export default {
           throw new Error('Отсутствует токен авторизации');
         }
 
-        const response = await api.post('/api/sprints', {
+        await api.post('/api/sprints', {
           title: this.newSprint.name,
           start_date: new Date(this.newSprint.start_date).toISOString(),
           end_date: new Date(this.newSprint.end_date).toISOString(),
@@ -488,19 +488,12 @@ export default {
           }
         });
         
-        // Инициализируем массив sprints, если он null
-        if (!this.sprints) {
-          this.sprints = [];
-        }
+        // Закрываем модальное окно и очищаем форму
+        this.closeSprintModal();
         
-        this.sprints.push(response.data);
-        this.showSprintModal = false;
-        this.newSprint = {
-          name: '',
-          start_date: '',
-          end_date: '',
-          goals: ''
-        };
+        // Обновляем список спринтов
+        await this.fetchSprints();
+        
         this.toast.success('Спринт успешно создан');
       } catch (error) {
         console.error('Ошибка при создании спринта:', error);
