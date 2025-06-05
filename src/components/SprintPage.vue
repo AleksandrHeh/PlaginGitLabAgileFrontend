@@ -46,6 +46,14 @@
             <div class="task-header">
               <p class="task-id">#{{ task.id }}</p>
               <p class="task-title"><strong>{{ task.title }}</strong></p>
+              <button 
+                v-if="column.title === 'К выполнению'"
+                @click="deleteTaskFromSprint(task.id)" 
+                class="delete-btn"
+                title="Удалить задачу из спринта"
+              >
+                ×
+              </button>
             </div>
             <p>{{ task.description || "Нет описания" }}</p>
             <p class="task-priority" :class="task.priority">
@@ -979,6 +987,35 @@ export default {
     closeInstructionsModal() {
       this.showInstructionsModal = false;
     },
+
+    async deleteTaskFromSprint(taskId) {
+      if (!confirm('Вы уверены, что хотите удалить эту задачу из спринта?')) {
+        return;
+      }
+
+      try {
+        const token = localStorage.getItem('token');
+        if (!token) {
+          throw new Error('Отсутствует токен авторизации');
+        }
+
+        await api.delete(
+          `/api/projects/${this.$route.params.id}/sprints/${this.$route.params.sprintId}/issues/${taskId}`,
+          {
+            headers: {
+              Authorization: `Bearer ${token}`
+            }
+          }
+        );
+
+        // Remove task from local state
+        this.tasks = this.tasks.filter(t => t.id !== taskId);
+        this.assignTasksToColumns();
+      } catch (error) {
+        console.error('Ошибка при удалении задачи из спринта:', error);
+        alert('Не удалось удалить задачу из спринта');
+      }
+    },
   },
   async mounted() {
     try {
@@ -1736,5 +1773,26 @@ h1 {
   .instruction-steps pre {
     font-size: 0.9rem;
   }
+}
+
+.delete-btn {
+  background-color: #e74c3c;
+  color: white;
+  border: none;
+  border-radius: 50%;
+  width: 24px;
+  height: 24px;
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.3s ease;
+}
+
+.delete-btn:hover {
+  background-color: #c0392b;
+  transform: scale(1.1);
 }
 </style>
