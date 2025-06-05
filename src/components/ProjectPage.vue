@@ -25,12 +25,12 @@
               <p><strong>Дата начала:</strong> {{ formatDate(sprint.spt_start_date) }}</p>
               <p><strong>Дата окончания:</strong> {{ formatDate(sprint.spt_end_date) }}</p>
               <p><strong>Цели:</strong> {{ sprint.spt_goals || "Нет целей" }}</p>
-              <p><strong>Статус:</strong> {{ sprint.is_completed ? 'Завершен' : 'Активен' }}</p>
+              <p><strong>Статус:</strong> {{ sprint.spt_status === 'completed' ? 'Завершен' : 'Активен' }}</p>
             </div>
             <div class="sprint-actions">
               <button @click="goToSprint(sprint.spt_id)" class="action-btn">Открыть спринт</button>
               <button 
-                v-if="sprint.is_completed" 
+                v-if="sprint.spt_status === 'completed'" 
                 @click="viewSprintReport(sprint)" 
                 class="action-btn report-btn"
               >
@@ -333,10 +333,10 @@ export default {
           }
         });
         
-        // Добавляем проверку завершения спринта
+        // Используем статус спринта из бэкенда
         this.sprints = response.data.map(sprint => ({
           ...sprint,
-          is_completed: new Date(sprint.spt_end_date) < new Date() || sprint.is_completed
+          is_completed: sprint.spt_status === 'completed'
         }));
       } catch (error) {
         console.error('Ошибка при получении спринтов:', error);
@@ -485,7 +485,7 @@ export default {
           throw new Error('Отсутствует токен авторизации');
         }
 
-        await api.post('/api/sprints', {
+        await api.post(`/api/projects/${this.$route.params.id}/sprints`, {
           title: this.newSprint.name,
           start_date: new Date(this.newSprint.start_date).toISOString(),
           end_date: new Date(this.newSprint.end_date).toISOString(),

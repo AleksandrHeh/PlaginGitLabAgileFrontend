@@ -25,12 +25,12 @@
           <span>Описание проекта</span>
           <span class="toggle-icon">{{ showDescription ? '▼' : '▶' }}</span>
         </div>
-        <textarea
-          v-if="showDescription"
-          v-model="projectDescription"
+      <textarea
+        v-if="showDescription"
+        v-model="projectDescription"
           placeholder="Введите описание проекта"
           class="form-control description-textarea"
-        ></textarea>
+      ></textarea>
       </div>
 
       <div class="form-group">
@@ -51,7 +51,7 @@
           type="date"
           class="form-control"
         />
-      </div>
+    </div>
 
       <div class="form-group">
         <label for="visibility">Видимость проекта</label>
@@ -149,25 +149,25 @@ export default {
     },
 
     async submitProject() {
-      if (!this.validateProjectData()) return;
+  if (!this.validateProjectData()) return;
 
-      const token = localStorage.getItem('token');
-      if (!token) {
-        this.toast.error("Ошибка авторизации");
-        return;
-      }
+  const token = localStorage.getItem('token');
+  if (!token) {
+    this.toast.error("Ошибка авторизации");
+    return;
+  }
 
       // Форматируем даты в ISO формат
       const formattedStartDate = new Date(this.startDate).toISOString().split('T')[0];
       const formattedEndDate = new Date(this.endDate).toISOString().split('T')[0];
 
-      try {
+  try {
         const response = await fetch("http://localhost:4000/api/gitlab/projects", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "Authorization": `Bearer ${token}`
-          },
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${token}`
+      },
           body: JSON.stringify({
             name: this.projectName.trim(),
             description: this.projectDescription.trim() || "",
@@ -182,17 +182,17 @@ export default {
         if (!response.ok) {
           const errorMessage = responseData.error || responseData.message || "Неизвестная ошибка";
           throw new Error(errorMessage);
-        }
+    }
 
         this.toast.success("Проект успешно создан!");
-        this.$emit('projectCreated');
-        this.resetForm();
-      } catch (error) {
-        console.error("Ошибка при создании проекта:", error);
+    this.$emit('projectCreated');
+    this.resetForm();
+  } catch (error) {
+    console.error("Ошибка при создании проекта:", error);
         const errorMessage = error instanceof Error ? error.message : "Произошла ошибка при создании проекта";
         this.toast.error(errorMessage);
-      }
-    },
+  }
+},
 
     resetForm() {
       this.projectName = "";

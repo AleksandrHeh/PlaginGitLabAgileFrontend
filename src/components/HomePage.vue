@@ -29,7 +29,6 @@
         <li :class="{ 'hidden': isSidebarCollapsed }" @click="showMembersView = true; showProjectsPage = false;">
           Участники
         </li>
-        <li :class="{ 'hidden': isSidebarCollapsed }">Отчеты</li>
         <li :class="{ 'hidden': isSidebarCollapsed }" class="logout-button" @click="logout">
           Выйти
         </li>

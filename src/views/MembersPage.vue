@@ -57,6 +57,7 @@
                       v-model="editingRole" 
                       class="role-select"
                     >
+                      <option value="administrator">Администратор</option>
                       <option value="project_manager">Менеджер проекта</option>
                       <option value="developer">Разработчик</option>
                     </select>
@@ -146,6 +147,7 @@ export default {
     },
     getRoleClass(role) {
       const roleMap = {
+        'administrator': 'administrator',
         'project_manager': 'project-manager',
         'developer': 'developer'
       }
@@ -154,6 +156,7 @@ export default {
     },
     getRoleDisplayName(role) {
       const roleMap = {
+        'administrator': 'Администратор',
         'project_manager': 'Менеджер проекта',
         'developer': 'Разработчик'
       }
@@ -498,6 +501,11 @@ export default {
 .role-badge:hover {
   transform: scale(1.05);
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.role-badge.administrator {
+  background-color: #9C27B0;
+  color: white;
 }
 
 .role-badge.project-manager {
