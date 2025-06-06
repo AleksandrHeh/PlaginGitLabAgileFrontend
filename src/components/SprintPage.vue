@@ -626,7 +626,7 @@ export default {
         }
 
         // Обновляем статус спринта на сервере
-        await api.put(
+        await api.post(
           `/api/projects/${this.$route.params.id}/sprints/${this.$route.params.sprintId}/complete`,
           {},
           {
@@ -955,7 +955,7 @@ export default {
         }
 
         await api.put(
-          `/api/projects/${this.$route.params.id}/sprints/${this.$route.params.sprintId}/issues/assignee`,
+          `/api/projects/${this.$route.params.id}/sprints/${this.$route.params.sprintId}/issues/${taskId}/assignee`,
           {
             issue_id: taskId,
             assignee_id: assigneeId

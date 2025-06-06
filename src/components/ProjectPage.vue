@@ -28,13 +28,27 @@
               <p><strong>Статус:</strong> {{ sprint.spt_status === 'completed' ? 'Завершен' : 'Активен' }}</p>
             </div>
             <div class="sprint-actions">
-            <button @click="goToSprint(sprint.spt_id)" class="action-btn">Открыть спринт</button>
+              <button @click="goToSprint(sprint.spt_id)" class="action-btn">Открыть спринт</button>
               <button 
                 v-if="sprint.spt_status === 'completed'" 
                 @click="viewSprintReport(sprint)" 
                 class="action-btn report-btn"
               >
                 Просмотреть отчет
+              </button>
+              <button 
+                v-if="sprint.spt_status !== 'completed'"
+                @click="openEditSprintModal(sprint)" 
+                class="action-btn edit-btn"
+              >
+                ✏️
+              </button>
+              <button 
+                v-if="sprint.spt_status !== 'completed'"
+                @click="openDeleteSprintModal(sprint)" 
+                class="action-btn delete-btn"
+              >
+                🗑️
               </button>
             </div>
           </li>
@@ -237,6 +251,35 @@
         </div>
       </div>
     </div>
+
+    <!-- Модальное окно для редактирования спринта -->
+    <div v-if="showEditSprintModal" class="modal-overlay" @click.self="closeEditSprintModal">
+      <div class="modal">
+        <h2>Редактирование спринта</h2>
+        <form @submit.prevent="updateSprint">
+          <div>
+            <label for="editSprintName">Название спринта:</label>
+            <input type="text" id="editSprintName" v-model="editingSprint.name" required />
+          </div>
+          <div>
+            <label for="editSprintGoals">Цели спринта:</label>
+            <textarea id="editSprintGoals" v-model="editingSprint.goals" rows="3"></textarea>
+          </div>
+          <div>
+            <label for="editStartDate">Дата начала:</label>
+            <input type="date" id="editStartDate" v-model="editingSprint.start_date" required />
+          </div>
+          <div>
+            <label for="editEndDate">Дата окончания:</label>
+            <input type="date" id="editEndDate" v-model="editingSprint.end_date" required />
+          </div>
+          <div class="modal-actions">
+            <button type="submit" class="action-btn">Сохранить изменения</button>
+            <button type="button" class="cancel-btn" @click="closeEditSprintModal">Отменить</button>
+          </div>
+        </form>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -292,6 +335,14 @@ export default {
         unfinishedTasks: 0,
         teamStats: [],
         unfinishedTasksList: []
+      },
+      showEditSprintModal: false,
+      editingSprint: {
+        id: null,
+        name: '',
+        start_date: '',
+        end_date: '',
+        goals: '',
       },
     };
   },
@@ -517,10 +568,26 @@ export default {
       this.selectedSprint = null;
       this.showDeleteSprintModal = false;
     },
-    confirmDeleteSprint() {
-      this.sprints = this.sprints.filter((sprint) => sprint.id !== this.selectedSprint.id);
-      this.toast.success('Спринт успешно удален!');
-      this.closeDeleteSprintModal();
+    async confirmDeleteSprint() {
+      try {
+        const token = localStorage.getItem('token');
+        if (!token) {
+          throw new Error('Отсутствует токен авторизации');
+        }
+
+        await api.delete(`/api/projects/${this.$route.params.id}/sprints/${this.selectedSprint.spt_id}`, {
+          headers: {
+            Authorization: `Bearer ${token}`
+          }
+        });
+
+        this.sprints = this.sprints.filter(sprint => sprint.spt_id !== this.selectedSprint.spt_id);
+        this.toast.success('Спринт успешно удален');
+        this.closeDeleteSprintModal();
+      } catch (error) {
+        console.error('Ошибка при удалении спринта:', error);
+        this.toast.error('Не удалось удалить спринт');
+      }
     },
     goToSprint(sprintId) {
       this.$router.push(`/projects/${this.$route.params.id}/sprint/${sprintId}`);
@@ -670,6 +737,57 @@ export default {
         console.error('Ошибка при создании PDF:', error);
         this.toast.error('Не удалось создать PDF отчет');
       }
+    },
+    openEditSprintModal(sprint) {
+      this.editingSprint = {
+        id: sprint.spt_id,
+        name: sprint.spt_title,
+        start_date: this.formatDateForInput(sprint.spt_start_date),
+        end_date: this.formatDateForInput(sprint.spt_end_date),
+        goals: sprint.spt_goals
+      };
+      this.showEditSprintModal = true;
+    },
+    closeEditSprintModal() {
+      this.showEditSprintModal = false;
+      this.editingSprint = {
+        id: null,
+        name: '',
+        start_date: '',
+        end_date: '',
+        goals: '',
+      };
+    },
+    async updateSprint() {
+      try {
+        const token = localStorage.getItem('token');
+        if (!token) {
+          throw new Error('Отсутствует токен авторизации');
+        }
+
+        await api.put(`/api/projects/${this.$route.params.id}/sprints/${this.editingSprint.id}`, {
+          title: this.editingSprint.name,
+          start_date: new Date(this.editingSprint.start_date).toISOString(),
+          end_date: new Date(this.editingSprint.end_date).toISOString(),
+          goals: this.editingSprint.goals
+        }, {
+          headers: {
+            Authorization: `Bearer ${token}`
+          }
+        });
+        
+        this.closeEditSprintModal();
+        await this.fetchSprints();
+        this.toast.success('Спринт успешно обновлен');
+      } catch (error) {
+        console.error('Ошибка при обновлении спринта:', error);
+        this.toast.error('Не удалось обновить спринт');
+      }
+    },
+    formatDateForInput(dateString) {
+      if (!dateString) return '';
+      const date = new Date(dateString);
+      return date.toISOString().split('T')[0];
     },
   },
   created() {
@@ -1253,5 +1371,25 @@ h2::before {
 
 .report-content::-webkit-scrollbar-thumb:hover {
   background: #555;
+}
+
+.edit-btn {
+  background-color: #f1c40f;
+  padding: 0.5rem;
+  font-size: 1.2rem;
+}
+
+.edit-btn:hover {
+  background-color: #f39c12;
+}
+
+.delete-btn {
+  background-color: #e74c3c;
+  padding: 0.5rem;
+  font-size: 1.2rem;
+}
+
+.delete-btn:hover {
+  background-color: #c0392b;
 }
 </style>
