@@ -13,35 +13,49 @@
     },
     methods: {
       async handleCallback() {
-  try {
-    const code = new URLSearchParams(window.location.search).get('code');
-    if (!code) {
-      console.error('Authorization code is missing');
-      this.$router.push({ name: 'AuthorizationForm' });
-      return;
-    }
+        try {
+          const code = new URLSearchParams(window.location.search).get('code');
+          const state = new URLSearchParams(window.location.search).get('state');
+          
+          if (!code) {
+            console.error('Код авторизации отсутствует');
+            this.$router.push({ name: 'AuthorizationForm' });
+            return;
+          }
 
-    const response = await axios.get(`http://localhost:4000/api/gitlab/callback?code=${code}`);
-    console.log("Ответ от сервера:", response.data); // Логируем ответ
+          const response = await axios.get(`http://localhost:4000/oauth/callback`, {
+            params: {
+              code: code,
+              state: state
+            },
+            withCredentials: true
+          });
 
-    const { user, token } = response.data;
+          if (response.data.error) {
+            console.error('Ошибка от сервера:', response.data.error);
+            this.$router.push({ name: 'AuthorizationForm' });
+            return;
+          }
 
-    if (!token) {
-      console.error("Токен отсутствует в ответе сервера");
-      this.toast.error("Ошибка: токен отсутствует в ответе сервера.");
-      return;
-    }
+          const { user, token } = response.data;
 
-    localStorage.setItem('user', JSON.stringify(user));
-    localStorage.setItem('token', token); // Сохраняем токен
+          if (!user || !token) {
+            console.error('Данные пользователя или токен отсутствуют в ответе');
+            this.$router.push({ name: 'AuthorizationForm' });
+            return;
+          }
 
-    this.$router.push('/home');
-  } catch (error) {
-    console.error('Ошибка при обработке OAuth callback:', error);
-    this.toast.error("Произошла ошибка при входе.");
-    this.$router.push({ name: 'AuthorizationForm' });
-  }
-},
+          // Сохраняем данные пользователя и токен
+          localStorage.setItem('user', JSON.stringify(user));
+          localStorage.setItem('token', token);
+          
+          // Перенаправляем на домашнюю страницу
+          this.$router.push({ name: 'HomePage' });
+        } catch (error) {
+          console.error('Ошибка при обработке OAuth callback:', error);
+          this.$router.push({ name: 'AuthorizationForm' });
+        }
+      },
     },
   };
   </script>

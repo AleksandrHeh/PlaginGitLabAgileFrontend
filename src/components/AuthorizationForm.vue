@@ -54,10 +54,8 @@ export default {
     loginWithGitLab() {
       try {
         this.isLoading = true;
-        // Имитация задержки перед перенаправлением
-        setTimeout(() => {
-          window.location.href = 'http://localhost:4000/api/gitlab/auth';
-        }, 1500);
+        // Redirect to the backend auth endpoint
+        window.location.href = 'http://localhost:4000/api/gitlab/auth';
       } catch (error) {
         console.error('Ошибка при перенаправлении:', error);
         this.errorMessage = 'Произошла ошибка. Попробуйте позже.';
