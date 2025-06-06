@@ -28,7 +28,7 @@
               <p><strong>Статус:</strong> {{ sprint.spt_status === 'completed' ? 'Завершен' : 'Активен' }}</p>
             </div>
             <div class="sprint-actions">
-              <button @click="goToSprint(sprint.spt_id)" class="action-btn">Открыть спринт</button>
+            <button @click="goToSprint(sprint.spt_id)" class="action-btn">Открыть спринт</button>
               <button 
                 v-if="sprint.spt_status === 'completed'" 
                 @click="viewSprintReport(sprint)" 

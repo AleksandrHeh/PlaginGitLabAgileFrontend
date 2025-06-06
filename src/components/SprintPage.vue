@@ -247,8 +247,12 @@
             <p>Допустим есть задача #123:</p>
             <ol>
               <li>Создаем ветку с номером задачи:
+                <pre>git branch issue-123</pre>
+              </li>
+              <li>Переходим на ветку с номером задачи:
                 <pre>git checkout issue-123</pre>
               </li>
+             
               <li>Делаем коммит с ключевым словом:
                 <pre>git commit -m "Fix #123"</pre>
               </li>
@@ -989,9 +993,9 @@ export default {
     },
 
     async deleteTaskFromSprint(taskId) {
-      if (!confirm('Вы уверены, что хотите удалить эту задачу из спринта?')) {
-        return;
-      }
+      // if (!confirm('Вы уверены, что хотите удалить эту задачу из спринта?')) {
+      //   return;
+      // }
 
       try {
         const token = localStorage.getItem('token');
